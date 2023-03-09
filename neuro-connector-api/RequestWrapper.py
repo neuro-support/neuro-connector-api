@@ -2,7 +2,6 @@
 import urllib3
 from Request import Request
 import logging
-import sys
 from time import sleep as pause
 import json
 
