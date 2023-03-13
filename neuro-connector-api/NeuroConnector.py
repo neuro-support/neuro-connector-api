@@ -178,6 +178,7 @@ if __name__ == "__main__":
     appToken = None
     function = None
     filePath = None
+    connectionId=None
 
     instructions = '\nNeuroConnector -c [connectonId] -o [organizationId] -u [baseUrl] -a [appToken] -f [function] -p [filePath]\n\nFunctions [1=sendTestResultsJson]\n'
 
