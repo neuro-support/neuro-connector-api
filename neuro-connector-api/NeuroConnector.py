@@ -150,6 +150,7 @@ class Request:
         if payload:
             payload = json.dumps(payload)
         target = self.url + endpoint
+        print(types+" "+target + " \nPayload: " + payload[:100])
         response = None
         session = requests.Session()
         session.verify = False  # This is for DB connection
