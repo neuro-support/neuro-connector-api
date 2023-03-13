@@ -117,6 +117,7 @@ class RequestWrapper():
 
                     attempt += 1
                 else:
+                    print("200")
                     return response, data
 
             except:
@@ -150,7 +151,7 @@ class Request:
         if payload:
             payload = json.dumps(payload)
         target = self.url + endpoint
-        print(types+" "+target + " \nPayload: " + payload[:100])
+        print(types+" "+target + " \nPayload: " + payload[:100] + "... [truncated to 100 chars]")
         response = None
         session = requests.Session()
         session.verify = False  # This is for DB connection
