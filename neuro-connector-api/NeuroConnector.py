@@ -67,7 +67,7 @@ class NeuroConnector:
     def sendTestResultsJson(self, filePath):
         assert filePath, "file path must not be null"
         j = self.parseJSONfile(filePath)
-        endpoint = "999999"
+        endpoint = "/999999"
         self.send_webhook(endpoint=endpoint, payload=j)
 
 
@@ -180,7 +180,6 @@ if __name__ == "__main__":
     filePath = None
 
     instructions = '\nNeuroConnector -c [connectonId] -o [organizationId] -u [baseUrl] -a [appToken] -f [function] -p [filePath]\n\nFunctions [1=sendTestResultsJson]\n'
-    connectionId = "637f77dcb688b65de6436769"
 
     args = sys.argv[1:]
     try:
