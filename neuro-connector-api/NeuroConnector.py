@@ -67,7 +67,7 @@ class NeuroConnector:
     def sendTestResultsJson(self, filePath):
         assert filePath, "file path must not be null"
         j = self.parseJSONfile(filePath)
-        endpoint = "/999999"
+        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
         self.send_webhook(endpoint=endpoint, payload=j)
 
 
