@@ -1,4 +1,5 @@
 import getopt
+import re
 import sys
 import traceback
 import urllib3
@@ -6,6 +7,9 @@ import logging
 from time import sleep as pause
 import json
 import requests
+import datetime
+import urllib.parse
+from datetime import datetime as dt
 
 logging.getLogger("neuro-api-client").propagate = False
 logging.basicConfig(filename='neuro-api-client.log', level=logging.INFO,
@@ -19,10 +23,22 @@ class NeuroConnector:
     requestWrapper = None
     connectionId = None
     organization = None
+    jobName = None
+    jobNumber = None
+    projectName = None
 
-    def __init__(self, appToken, url, connectionId, organizationId):
+    def __init__(self, appToken,  url, connectionId, organizationId, jobName, projectName, jobNumber=None):
+        self.jobNumber=jobNumber
+
+        self.projectName = projectName
+        assert self.projectName, "project name needed"
+
+        self.jobName = jobName
+        assert self.jobName, "job name needed"
+
         self.requestWrapper = RequestWrapper(token="Bearer " + appToken,
                                              url=url)
+
         assert self.requestWrapper, "couldn't initiate request wrapper"
 
         self.connectionId = connectionId
@@ -49,6 +65,18 @@ class NeuroConnector:
         # endpoint = "/ms-provision-receptor/custom/zephyr/zephyr-f-cloud-controller"
         self.requestWrapper.make(endpoint=endpoint, payload=payload, types="POST")
 
+    # Neuro needs updatedDate to be today's date and in isoformat and seconds to 3 decimal places,
+    # e.g. 2021-08-19T13:06:23.123+0100
+    def formatCurrentDateTime(self):
+        currentDateTime = (dt.now(datetime.timezone.utc) - datetime.timedelta(hours=0,
+                                                                              minutes=3)).astimezone().isoformat(
+            timespec='milliseconds')
+
+        # Removes the : symbol from timezone
+        parsed = re.sub(r'([+-]\d+):(\d+)$', r'\1\2', currentDateTime)
+
+        return parsed
+
     def deleteData(self):
         logging.info("deleting existing data")
         endpoint = '/ms-provision-receptor/custom/zephyr/remove-data/' + self.organizationId + '/' + self.connectionId
@@ -60,15 +88,94 @@ class NeuroConnector:
 
     def parseJSONfile(self, filepath):
         payload = ''
-        with open(filepath) as json_file:
+        with open(filepath, encoding='utf-8') as json_file:
             payload = json.load(json_file)
         return payload
 
-    def sendTestResultsJson(self, filePath):
+    def getJobNumberPrefix(self):
+        if self.jobNumber is None:
+            return
+
+    def buildTestResultWebhookPayload(self, results, jobName, jobNumber, path, projectName):
+        duration = self.calculateDuration(results)
+
+        timestamp = str(self.formatCurrentDateTime())
+        numericTimeStamp = re.sub("[^0-9]", "", timestamp)[:-4]
+
+        if jobNumber is None:
+            jobNumber = numericTimeStamp
+            id = str(jobName) + "_" + numericTimeStamp
+        else:
+            id = str(jobName) + "_" + str(jobNumber)+ "_" + str(numericTimeStamp)
+
+        return {
+            "actions": [
+                {
+                    "path": str(path),
+                    "testResult": results
+                }
+            ],
+            "displayName": str(jobName),
+            "duration": duration,
+            "estimatedDuration": duration,
+            "fullDisplayName": str(jobName),
+            "id": id,
+            "number": jobNumber,
+            "organization": self.organizationId,
+            "projectName": str(projectName),
+            "result": self.getResult(results),
+            "timestamp": timestamp,
+            "url": "https://myneuro.ai"
+        }
+
+    # @todo: url - descoped - generic value
+    # @todo: jobNumber - make non-mandatory (timestamp), provide instructions for bitbucket pipelines
+
+    def encodeStringForURL(self, string):
+        return urllib.parse.quote(string)
+
+    def sendCucumberTestResultsJson(self, filePath):
         assert filePath, "file path must not be null"
-        j = self.parseJSONfile(filePath)
+        results = self.parseJSONfile(filePath)
+        payload = self.buildTestResultWebhookPayload(results=results, jobName=self.jobName, jobNumber=self.jobNumber,
+                                                     path=filePath, projectName=self.projectName)
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
-        self.send_webhook(endpoint=endpoint, payload=j)
+        self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def getResult(self, results):
+        overallResult = "unknown"
+        stepStatuses = []
+
+        for scenario in results:
+            if 'elements' in scenario:
+                for element in scenario['elements']:
+                    if 'steps' in element:
+                        for step in element['steps']:
+                            if 'result' in step:
+                                if 'status' in step['result']:
+                                    overallResult = "known"
+                                    stepStatuses.append(step['result']['status'])
+
+        if overallResult == "known":
+            overallResult = "passed"
+            for status in stepStatuses:
+                if status != "passed":
+                    overallResult = "failed"
+
+        return overallResult
+
+    def calculateDuration(self, results):
+        duration = 0
+        for scenario in results:
+            if 'elements' in scenario:
+                for element in scenario['elements']:
+                    if 'steps' in element:
+                        for step in element['steps']:
+                            if 'result' in step:
+                                if 'duration' in step['result']:
+                                    duration = duration + int(step['result']['duration'])
+
+        return duration
 
 
 class RequestWrapper():
@@ -151,7 +258,7 @@ class Request:
         if payload:
             payload = json.dumps(payload)
         target = self.url + endpoint
-        print(types+" "+target + " \nPayload: " + payload[:100] + "... [truncated to 100 chars]")
+        print(types + " " + target + " \nPayload: " + payload[:200] + "... [truncated to 200 chars]")
         response = None
         session = requests.Session()
         session.verify = False  # This is for DB connection
@@ -175,18 +282,22 @@ class Request:
 
 
 if __name__ == "__main__":
+    appToken=None
     organizationId = None
     baseUrl = None
-    appToken = None
     function = None
     filePath = None
-    connectionId=None
+    connectionId = None
+    jobNumber = None
+    projectName = None
+    jobName = None
 
-    instructions = '\nNeuroConnector -c [connectonId] -o [organizationId] -u [baseUrl] -a [appToken] -f [function] -p [filePath]\n\nFunctions [1=sendTestResultsJson]\n'
+    instructions = '\nNeuroConnector -f [function] -p [filePath] -u [baseUrl] -a [appToken] -o [organizationId] -c [connectonId] -n [projectName] -k [jobName] -j [jobNumber]  \n\nFunctions [1=sendTestResultsJson]\n'
+
 
     args = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(args, "c:o:u:a:f:p:h")
+        opts, args = getopt.getopt(args, "f:p:u:a:o:c:n:k:j:h")
     except getopt.GetoptError:
         print(instructions, file=sys.stderr)
         sys.exit(2)
@@ -203,8 +314,15 @@ if __name__ == "__main__":
             function = arg
         elif opt in ("-p"):
             filePath = arg
+        elif opt in ("-n"):
+            projectName = arg
+        elif opt in ("-j"):
+            jobNumber = arg
+        elif opt in ("-k"):
+            jobName = arg
         elif opt in ("-h"):
-            print(instructions)
+            print("HELP " + instructions, file=sys.stderr)
+            sys.exit()
         else:
             print(instructions, file=sys.stderr)
             sys.exit()
@@ -213,13 +331,17 @@ if __name__ == "__main__":
     assert baseUrl, "url must not be none\n" + instructions
     assert connectionId, "connectionId must not be none\n" + instructions
     assert organizationId, "organizationId must not be none\n" + instructions
-    assert filePath, "filePath must not be none\n" + instructions
     assert function, "function must not be none\n" + instructions
 
+    assert filePath, "filePath must not be none\n" + instructions
+    assert projectName, "projectName must not be none\n" + instructions
+    assert jobName, "jobName must not be none\n" + instructions
+
     try:
-        nc = NeuroConnector(appToken=appToken, url=baseUrl, connectionId=connectionId, organizationId=organizationId)
+        nc = NeuroConnector(appToken=appToken,url=baseUrl, connectionId=connectionId, organizationId=organizationId,
+                            jobName=jobName, projectName=projectName, jobNumber=jobNumber)
         if str(function) == '1':
-            nc.sendTestResultsJson(filePath=filePath)
+            nc.sendCucumberTestResultsJson(filePath=filePath)
         else:
             raise Exception("no function configured for " + str(function))
     except Exception as e:
