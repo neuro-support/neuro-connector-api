@@ -325,11 +325,9 @@ if __name__ == "__main__":
         elif opt in ("-p"):
             filePath = arg
         elif opt in ("-n"):
-            projectName = arg
+            jobName = arg
         elif opt in ("-j"):
             jobNumber = arg
-        elif opt in ("-k"):
-            jobName = arg
         elif opt in ("-h"):
             print("HELP " + instructions, file=sys.stderr)
             sys.exit()
