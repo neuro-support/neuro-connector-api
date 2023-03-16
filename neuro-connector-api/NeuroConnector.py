@@ -1,6 +1,7 @@
 import getopt
 import re
 import sys
+import time
 import traceback
 import urllib3
 import logging
@@ -27,22 +28,23 @@ class NeuroConnector:
     jobNumber = None
     projectName = None
 
-    def __init__(self, appToken,  url, connectionId, organizationId, jobName, projectName, jobNumber=None):
-        self.jobNumber=jobNumber
-
-        self.projectName = projectName
-        assert self.projectName, "project name needed"
+    def __init__(self, appToken, url, connectionId, organizationId, jobName, jobNumber=None):
+        self.jobNumber = jobNumber
 
         self.jobName = jobName
         assert self.jobName, "job name needed"
 
-        self.requestWrapper = RequestWrapper(token="Bearer " + appToken,
+        if appToken:
+            token = "Bearer " + appToken
+        else:
+            token = None
+
+        self.requestWrapper = RequestWrapper(token=token,
                                              url=url)
 
         assert self.requestWrapper, "couldn't initiate request wrapper"
 
         self.connectionId = connectionId
-        assert self.connectionId, "connectionId missing"
         self.organizationId = organizationId
         assert self.organizationId, "organizationId missing"
 
@@ -77,6 +79,9 @@ class NeuroConnector:
 
         return parsed
 
+    def getEpochTime(self):
+        return str(int(time.time()))
+
     def deleteData(self):
         logging.info("deleting existing data")
         endpoint = '/ms-provision-receptor/custom/zephyr/remove-data/' + self.organizationId + '/' + self.connectionId
@@ -92,21 +97,15 @@ class NeuroConnector:
             payload = json.load(json_file)
         return payload
 
-    def getJobNumberPrefix(self):
-        if self.jobNumber is None:
-            return
-
-    def buildTestResultWebhookPayload(self, results, jobName, jobNumber, path, projectName):
+    def buildTestResultWebhookPayload(self, results, jobName, jobNumber, path):
         duration = self.calculateDuration(results)
 
-        timestamp = str(self.formatCurrentDateTime())
-        numericTimeStamp = re.sub("[^0-9]", "", timestamp)[:-4]
-
+        timestamp = self.getEpochTime()
         if jobNumber is None:
-            jobNumber = numericTimeStamp
-            id = str(jobName) + "_" + numericTimeStamp
+            jobNumber = str(timestamp)
+            id = str(jobName) + "_" + str(timestamp)
         else:
-            id = str(jobName) + "_" + str(jobNumber)+ "_" + str(numericTimeStamp)
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
 
         return {
             "actions": [
@@ -115,21 +114,18 @@ class NeuroConnector:
                     "testResult": results
                 }
             ],
-            "displayName": str(jobName),
-            "duration": duration,
+            "displayName": "#" + jobNumber,
+            "duration": 0,
             "estimatedDuration": duration,
-            "fullDisplayName": str(jobName),
+            "fullDisplayName": str(jobName) + " #" + jobNumber,
             "id": id,
-            "number": jobNumber,
+            "number": int(jobNumber),
             "organization": self.organizationId,
-            "projectName": str(projectName),
+            "projectName": str(jobName),
             "result": self.getResult(results),
             "timestamp": timestamp,
             "url": "https://myneuro.ai"
         }
-
-    # @todo: url - descoped - generic value
-    # @todo: jobNumber - make non-mandatory (timestamp), provide instructions for bitbucket pipelines
 
     def encodeStringForURL(self, string):
         return urllib.parse.quote(string)
@@ -137,13 +133,13 @@ class NeuroConnector:
     def sendCucumberTestResultsJson(self, filePath):
         assert filePath, "file path must not be null"
         results = self.parseJSONfile(filePath)
+
         payload = self.buildTestResultWebhookPayload(results=results, jobName=self.jobName, jobNumber=self.jobNumber,
-                                                     path=filePath, projectName=self.projectName)
+                                                     path=filePath)
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
         self.send_webhook(endpoint=endpoint, payload=payload)
 
     def getResult(self, results):
-        overallResult = "unknown"
         stepStatuses = []
 
         for scenario in results:
@@ -153,14 +149,15 @@ class NeuroConnector:
                         for step in element['steps']:
                             if 'result' in step:
                                 if 'status' in step['result']:
-                                    overallResult = "known"
                                     stepStatuses.append(step['result']['status'])
 
-        if overallResult == "known":
-            overallResult = "passed"
+        if len(stepStatuses) > 0:
+            overallResult = "SUCCESS"
             for status in stepStatuses:
-                if status != "passed":
-                    overallResult = "failed"
+                if status not in ["passed", "failed"]:
+                    overallResult = "UNSTABLE"
+        else:
+            overallResult = "FAILURE"
 
         return overallResult
 
@@ -177,6 +174,16 @@ class NeuroConnector:
 
         return duration
 
+    # def removeEmbeddings(self, results):
+    #     for scenario in results:
+    #         if 'elements' in scenario:
+    #             for element in scenario['elements']:
+    #                 if 'steps' in element:
+    #                     for step in element['steps']:
+    #                         if 'result' in step:
+    #                             if 'duration' in step['result']:
+    #                                 duration = duration + int(step['result']['duration'])
+
 
 class RequestWrapper():
     request = None
@@ -184,7 +191,7 @@ class RequestWrapper():
     logging.basicConfig(filename='neuro-api-client.log', level=logging.DEBUG,
                         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-    def __init__(self, token, url):
+    def __init__(self, url,token=None):
         self.request = Request(token, url)
         # TO DO - implement certificate verification and remove the below
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -224,7 +231,7 @@ class RequestWrapper():
 
                     attempt += 1
                 else:
-                    print("200")
+                    print("Response: " + str(response.json()))
                     return response, data
 
             except:
@@ -250,7 +257,12 @@ class Request:
     # The constructor specifies the headers - none of the inputs are mandatory as defaults are provided
     def __init__(self, token, url):
         self.token = token
-        self.headers = {"accept": 'application/json', "Authorization": self.token, "content-type": "application/json"}
+        if token is not None:
+            self.headers = {"accept": 'application/json', "Authorization": self.token,
+                            "content-type": "application/json"}
+        else:
+            self.headers = {"accept": 'application/json',
+                            "content-type": "application/json"}
         self.url = url
 
     # Call this method to make the actual HTTP request
@@ -282,22 +294,20 @@ class Request:
 
 
 if __name__ == "__main__":
-    appToken=None
+    appToken = None
     organizationId = None
     baseUrl = None
     function = None
     filePath = None
     connectionId = None
     jobNumber = None
-    projectName = None
     jobName = None
 
-    instructions = '\nNeuroConnector -f [function] -p [filePath] -u [baseUrl] -a [appToken] -o [organizationId] -c [connectonId] -n [projectName] -k [jobName] -j [jobNumber]  \n\nFunctions [1=sendTestResultsJson]\n'
-
+    instructions = '\nNeuroConnector -f [function] -p [filePath] -u [baseUrl] -a [appToken optional] -o [organizationId] -c [connectonId optional] -n [jobName] -j [jobNumber optional]  \n\nFunctions [1=sendTestResultsJson]\n'
 
     args = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(args, "f:p:u:a:o:c:n:k:j:h")
+        opts, args = getopt.getopt(args, "f:p:u:a:o:c:n:j:h")
     except getopt.GetoptError:
         print(instructions, file=sys.stderr)
         sys.exit(2)
@@ -327,20 +337,17 @@ if __name__ == "__main__":
             print(instructions, file=sys.stderr)
             sys.exit()
 
-    assert appToken, "app token must not be none\n" + instructions
     assert baseUrl, "url must not be none\n" + instructions
-    assert connectionId, "connectionId must not be none\n" + instructions
     assert organizationId, "organizationId must not be none\n" + instructions
     assert function, "function must not be none\n" + instructions
 
-    assert filePath, "filePath must not be none\n" + instructions
-    assert projectName, "projectName must not be none\n" + instructions
     assert jobName, "jobName must not be none\n" + instructions
 
     try:
-        nc = NeuroConnector(appToken=appToken,url=baseUrl, connectionId=connectionId, organizationId=organizationId,
-                            jobName=jobName, projectName=projectName, jobNumber=jobNumber)
+        nc = NeuroConnector(appToken=appToken, url=baseUrl, connectionId=connectionId, organizationId=organizationId,
+                            jobName=jobName, jobNumber=jobNumber)
         if str(function) == '1':
+            assert filePath, "filePath must not be none\n" + instructions
             nc.sendCucumberTestResultsJson(filePath=filePath)
         else:
             raise Exception("no function configured for " + str(function))
