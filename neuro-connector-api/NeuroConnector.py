@@ -28,11 +28,8 @@ class NeuroConnector:
     jobNumber = None
     projectName = None
 
-    def __init__(self, appToken, url, connectionId, organizationId, jobName, jobNumber=None):
-        self.jobNumber = jobNumber
-
-        self.jobName = jobName
-        assert self.jobName, "job name needed"
+    def __init__(self, url, organizationId, appToken=None):
+        assert url, "need neuro base url"
 
         if appToken:
             token = "Bearer " + appToken
@@ -44,7 +41,6 @@ class NeuroConnector:
 
         assert self.requestWrapper, "couldn't initiate request wrapper"
 
-        self.connectionId = connectionId
         self.organizationId = organizationId
         assert self.organizationId, "organizationId missing"
 
@@ -80,7 +76,7 @@ class NeuroConnector:
         return parsed
 
     def getEpochTime(self):
-        return str(int(time.time()))
+        return str(int(time.time() * 1000))
 
     def deleteData(self):
         logging.info("deleting existing data")
@@ -97,10 +93,12 @@ class NeuroConnector:
             payload = json.load(json_file)
         return payload
 
-    def buildTestResultWebhookPayload(self, results, jobName, jobNumber, path):
+    def buildTestResultWebhookPayload(self, results, jobName, jobNumber):
         duration = self.calculateDuration(results)
 
         timestamp = self.getEpochTime()
+        jobNumber = str(jobNumber)
+
         if jobNumber is None:
             jobNumber = str(timestamp)
             id = str(jobName) + "_" + str(timestamp)
@@ -110,7 +108,6 @@ class NeuroConnector:
         return {
             "actions": [
                 {
-                    "path": str(path),
                     "testResult": results
                 }
             ],
@@ -130,13 +127,18 @@ class NeuroConnector:
     def encodeStringForURL(self, string):
         return urllib.parse.quote(string)
 
-    def sendCucumberTestResultsJson(self, filePath):
-        assert filePath, "file path must not be null"
+    def sendCucumberTestResultsJson(self, filePath,
+                                    jobName, jobNumber=None):
+
         results = self.parseJSONfile(filePath)
 
-        payload = self.buildTestResultWebhookPayload(results=results, jobName=self.jobName, jobNumber=self.jobNumber,
-                                                     path=filePath)
+        payload = self.buildTestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        self.send_webhook(endpoint=endpoint, payload=payload)
+
+
+    def sendTriggerWebhook(self,payload):
+        endpoint="???"
         self.send_webhook(endpoint=endpoint, payload=payload)
 
     def getResult(self, results):
@@ -183,6 +185,28 @@ class NeuroConnector:
     #                         if 'result' in step:
     #                             if 'duration' in step['result']:
     #                                 duration = duration + int(step['result']['duration'])
+    def releaseTrigger(self, projectKey, branch, commitId, label, environmentName, environmentType, vcsProject):
+        payload = self.buildGenericTriggerPayload(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
+        payload["triggerType"]="release"
+        self.sendTriggerWebhook(payload)
+
+    def deploymentTrigger(self,projectKey, branch, commitId, label, environmentName, environmentType, vcsProject):
+        payload = self.buildGenericTriggerPayload(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
+        payload["triggerType"] = "deployment"
+        self.sendTriggerWebhook(payload)
+
+
+    def buildGenericTriggerPayload(self, projectKey, branch, commitId, label, environmentName, environmentType, vcsProject):
+        return {
+            'projectKey':projectKey,
+            'branch':branch,
+            'commitId':commitId,
+            'label':label,
+            'environmentName':environmentName,
+            'environmentType':environmentType,
+            'vcsProject':vcsProject
+        }
+
 
 
 class RequestWrapper():
@@ -191,7 +215,7 @@ class RequestWrapper():
     logging.basicConfig(filename='neuro-api-client.log', level=logging.DEBUG,
                         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-    def __init__(self, url,token=None):
+    def __init__(self, url, token=None):
         self.request = Request(token, url)
         # TO DO - implement certificate verification and remove the below
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -294,61 +318,115 @@ class Request:
 
 
 if __name__ == "__main__":
-    appToken = None
+    # common
     organizationId = None
     baseUrl = None
+
+    # Function 1 (sendTestResultsJson)
     function = None
     filePath = None
-    connectionId = None
     jobNumber = None
     jobName = None
 
-    instructions = '\nNeuroConnector -f [function] -p [filePath] -u [baseUrl] -a [appToken optional] -o [organizationId] -c [connectonId optional] -n [jobName] -j [jobNumber optional]  \n\nFunctions [1=sendTestResultsJson]\n'
+    # Function 2 (releaseTrigger) & Function 3 (deploymentTrigger)
+    projectKey = None
+    branch = None
+    commitId = None
+    label = None
+    environmentName = None
+    environmentType = None
+    vcsProject = None
+
+    # organizationId = "60a0fd7ec662000080004d32"
+    # function = 1
+    # filePath = "cucumber-reports.json"
+    # baseUrl = "https://app.myneuro.ai"
+    # jobNumber = 19
+    # jobName = "mucahits_json"
+
+    instructions = '\nFunction 1 (sendTestResultsJson) NeuroConnector --func 1 --path [filePath] --url [baseUrl] --org [organizationId] --jobName [jobName] --jobNum [jobNumber (optional)]'
+    instructions = instructions + '\nFunction 2 (releaseTrigger) NeuroConnector --func 2  --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]'
+    instructions = instructions + '\nFunction 3 (deploymentTrigger) NeuroConnector --func 3 --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]'
 
     args = sys.argv[1:]
     try:
-        opts, args = getopt.getopt(args, "f:p:u:a:o:c:n:j:h")
+        opts, args = getopt.getopt(args,
+                                   longopts=["func", "path", "url", "org", "jobName", "jobNum", "projKey", "vcsProj",
+                                             "branch", "commitId", "label", "env", "envType"])
     except getopt.GetoptError:
         print(instructions, file=sys.stderr)
         sys.exit(2)
+
     for opt, arg in opts:
-        if opt in ("-c"):
-            connectionId = arg
-        elif opt in ("-o"):
-            organizationId = arg
-        elif opt in ("-u"):
-            baseUrl = arg
-        elif opt in ("-a"):
-            appToken = arg
-        elif opt in ("-f"):
+        if opt in ("--func"):
             function = arg
-        elif opt in ("-p"):
-            filePath = arg
-        elif opt in ("-n"):
-            jobName = arg
-        elif opt in ("-j"):
-            jobNumber = arg
-        elif opt in ("-h"):
-            print("HELP " + instructions, file=sys.stderr)
-            sys.exit()
-        else:
+
+        if opt in ["-h", "--help"]:
+            print("HELP: " + instructions, file=sys.stderr)
+            sys.exit(2)
+
+        if function is None:
             print(instructions, file=sys.stderr)
-            sys.exit()
+            raise Exception("function param needed --func")
 
-    assert baseUrl, "url must not be none\n" + instructions
-    assert organizationId, "organizationId must not be none\n" + instructions
-    assert function, "function must not be none\n" + instructions
+    if str(function) == '1':
+        for opt, arg in opts:
+            if opt in ("--org"):
+                organizationId = arg
+            elif opt in ("--url"):
+                baseUrl = arg
+            elif opt in ("--path"):
+                filePath = arg
+            elif opt in ("--jobName"):
+                jobName = arg
+            elif opt in ("--jobNum"):
+                jobNumber = arg
+            else:
+                print(instructions, file=sys.stderr)
+                raise Exception("param " + str(arg) + " not defined for func " + str(function))
 
-    assert jobName, "jobName must not be none\n" + instructions
+
+    elif str(function) in ['2', '3']:
+        for opt, arg in opts:
+            if opt in ("--org"):
+                organizationId = arg
+            elif opt in ("--url"):
+                baseUrl = arg
+            elif opt in ("--projKey"):
+                projectKey = arg
+            elif opt in ("--branch"):
+                branch = arg
+            elif opt in ("--commitId"):
+                commitId = arg
+            elif opt in ("--label"):
+                label = arg
+            elif opt in ("--env"):
+                environmentName = arg
+            elif opt in ("--envType"):
+                environmentType = arg
+            elif opt in ("--vcsProj"):
+                vcsProject = arg
+            else:
+                print(instructions, file=sys.stderr)
+                raise Exception("param " + str(arg) + " not defined for func " + str(function))
+    else:
+        print(instructions, file=sys.stderr)
+        raise Exception("function not defined")
 
     try:
-        nc = NeuroConnector(appToken=appToken, url=baseUrl, connectionId=connectionId, organizationId=organizationId,
-                            jobName=jobName, jobNumber=jobNumber)
+        nc = NeuroConnector(url=baseUrl, organizationId=organizationId)
         if str(function) == '1':
             assert filePath, "filePath must not be none\n" + instructions
-            nc.sendCucumberTestResultsJson(filePath=filePath)
+            nc.sendCucumberTestResultsJson(filePath=filePath,
+                                           jobName=jobName, jobNumber=jobNumber)
+        elif str(function) == '2':
+            nc.releaseTrigger(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
+        elif str(function) == '3':
+            nc.deploymentTrigger(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
         else:
             raise Exception("no function configured for " + str(function))
+
+
     except Exception as e:
         print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
         logging.error(traceback.format_exc())
