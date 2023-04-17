@@ -12,11 +12,6 @@ import datetime
 import urllib.parse
 from datetime import datetime as dt
 
-logging.getLogger("neuro-connector-api").propagate = False
-logging.basicConfig(filename='neuro-connector-api.log', level=logging.INFO,
-                    format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-
-
 class NeuroConnector:
     logging.getLogger("neuro-connector-api").propagate = False
     logging.basicConfig(filename='neuro-connector-api.log', level=logging.DEBUG,
@@ -339,7 +334,13 @@ class Request:
         return response, jsonResponse
 
 
-if __name__ == "__main__":
+class Orchestrator:
+    logging.getLogger("neuro-connector-api").propagate = False
+    logging.basicConfig(filename='neuro-connector-api.log', level=logging.INFO,
+                        format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+
+    opts=[]
+
     # common
     organizationId = None
     baseUrl = None
@@ -359,93 +360,95 @@ if __name__ == "__main__":
     environmentType = None
     vcsProject = None
 
-    # organizationId = "60a0fd7ec662000080004d32"
-    # function = 1
-    # filePath = "cucumber-reports.json"
-    # baseUrl = "https://app.myneuro.ai"
-    # jobNumber = 19
-    # jobName = "mucahits_json"
+    def __init__(self, args):
 
-    instructions = '\nFunction 1 (sendTestResultsJson) NeuroConnector --func 1 --path [filePath] --url [baseUrl] --org [organizationId] --jobName [jobName] --jobNum [jobNumber (optional)]'
-    instructions = instructions + '\nFunction 2 (releaseTrigger) NeuroConnector --func 2  --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]'
-    instructions = instructions + '\nFunction 3 (deploymentTrigger) NeuroConnector --func 3 --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]'
+        self.args = args
+        self.opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--projKey=", "--vcsProj=",
+                "--branch=", "--commitId=", "--label=", "--env=", "--envType=", "--help"]
 
-    args = sys.argv[1:]
-    opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--projKey=", "--vcsProj=",
-            "--branch=", "--commitId=", "--label=", "--env=", "--envType=", "--help"]
+        self.instructions= '\n-h, --help : Help\n'
+        self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --path [filePath] --url [baseUrl] --org [organizationId] --jobName [jobName] --jobNum [jobNumber (optional)]\n'
+        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2  --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]\n'
+        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 3 --url [baseUrl] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]\n'
 
-    parameterPairs = {}
-    for i, arg in enumerate(args):
-        for opt in opts:
-            if opt[-1] == "=" and opt[:-1] == arg:
-                try:
-                    value = args[i + 1]
-                    assert value is not None and not value.startswith("-")
-                except:
-                    raise Exception("no value for key " + arg)
+    def getParameterPairsForArgs(self):
+        parameterPairs = {}
+        for i, arg in enumerate(self.args):
+            for opt in self.opts:
+                if opt[-1] == "=" and opt[:-1] == arg:
+                    try:
+                        value = self.args[i + 1]
+                        assert value is not None and not value.startswith("-")
+                    except:
+                        raise Exception("no value for key " + arg)
 
-                parameterPairs.update({arg: value})
-            elif arg == opt and opt[-1] != "=":
-                parameterPairs.update({arg: None})
+                    parameterPairs.update({arg: value})
+                elif arg == opt and opt[-1] != "=":
+                    parameterPairs.update({arg: None})
 
-    if "-h" in parameterPairs or "--help" in parameterPairs or len(parameterPairs.keys()) == 0:
-        print("HELP: " + instructions, file=sys.stderr)
-        sys.exit(2)
+        return parameterPairs
 
-    if "--func" not in parameterPairs:
-        print(instructions, file=sys.stderr)
-        raise Exception("function param needed --func")
 
-    function = parameterPairs["--func"]
+    def orchestrate(self):
+        parameterPairs=self.getParameterPairsForArgs()
 
-    if str(function) == '1':
-        for key in parameterPairs.keys():
-            if key == "--org":
-                organizationId = parameterPairs[key]
-            elif key == "--url":
-                baseUrl = parameterPairs[key]
-            elif key == "--path":
-                filePath = parameterPairs[key]
-            elif key == "--jobName":
-                jobName = parameterPairs[key]
-            elif key == "--jobNum":
-                jobNumber = parameterPairs[key]
+        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(parameterPairs.keys()) != 0, "\n\nSee instructions\n"+self.instructions
+        assert "--func" in parameterPairs, "function param needed --func\n" + self.instructions
 
-    elif str(function) in ['2', '3']:
-        for key in parameterPairs.keys():
-            if key == "--org":
-                organizationId = parameterPairs[key]
-            elif key == "--url":
-                baseUrl = parameterPairs[key]
-            elif key == "--projKey":
-                projectKey = parameterPairs[key]
-            elif key == "--branch":
-                branch = parameterPairs[key]
-            elif key == "--commitId":
-                commitId = parameterPairs[key]
-            elif key == "--label":
-                label = parameterPairs[key]
-            elif key == "--env":
-                environmentName = parameterPairs[key]
-            elif key == "--envType":
-                environmentType = parameterPairs[key]
-            elif key == "--vcsProj":
-                vcsProject = parameterPairs[key]
+        function = parameterPairs["--func"]
 
-    try:
-        nc = NeuroConnector(url=baseUrl, organizationId=organizationId)
         if str(function) == '1':
-            nc.sendCucumberTestResultsJson(filePath, jobName, jobNumber)
-        elif str(function) == '2':
-            nc.releaseTrigger(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
-        elif str(function) == '3':
-            nc.deploymentTrigger(projectKey, branch, commitId, label, environmentName, environmentType, vcsProject)
-        else:
-            print(instructions, file=sys.stderr)
-            raise Exception("function not defined")
+            for key in parameterPairs.keys():
+                if key == "--org":
+                    self.organizationId = parameterPairs[key]
+                elif key == "--url":
+                    self.baseUrl = parameterPairs[key]
+                elif key == "--path":
+                    self.filePath = parameterPairs[key]
+                elif key == "--jobName":
+                    self.jobName = parameterPairs[key]
+                elif key == "--jobNum":
+                    self.jobNumber = parameterPairs[key]
 
-    except Exception as e:
-        print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
-        logging.error(traceback.format_exc())
-        print(traceback.format_exc(), file=sys.stderr)
-        sys.exit(2)
+        elif str(function) in ['2', '3']:
+            for key in parameterPairs.keys():
+                if key == "--org":
+                    self.organizationId = parameterPairs[key]
+                elif key == "--url":
+                    self.baseUrl = parameterPairs[key]
+                elif key == "--projKey":
+                    self.projectKey = parameterPairs[key]
+                elif key == "--branch":
+                    self.branch = parameterPairs[key]
+                elif key == "--commitId":
+                    self.commitId = parameterPairs[key]
+                elif key == "--label":
+                    self.label = parameterPairs[key]
+                elif key == "--env":
+                    self.environmentName = parameterPairs[key]
+                elif key == "--envType":
+                    self.environmentType = parameterPairs[key]
+                elif key == "--vcsProj":
+                    self.vcsProject = parameterPairs[key]
+
+        try:
+            nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
+            if str(function) == '1':
+                nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+            elif str(function) == '2':
+                nc.releaseTrigger(self.projectKey, self.branch, self.commitId, self.label, self.environmentName, self.environmentType, self.vcsProject)
+            elif str(function) == '3':
+                nc.deploymentTrigger(self.projectKey, self.branch, self.commitId, self.label, self.environmentName, self.environmentType, self.vcsProject)
+            else:
+                print(self.instructions, file=sys.stderr)
+                raise Exception("function not defined")
+
+        except Exception as e:
+            print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
+            logging.error(traceback.format_exc())
+            print(traceback.format_exc(), file=sys.stderr)
+            sys.exit(2)
+
+
+if __name__ == "__main__":
+    Orchestrator(args=sys.argv[1:]).orchestrate()
