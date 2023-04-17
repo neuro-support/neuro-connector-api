@@ -18,7 +18,6 @@ logging.basicConfig(filename='neuro-connector-api.log', level=logging.INFO,
 
 
 class NeuroConnector:
-
     logging.getLogger("neuro-connector-api").propagate = False
     logging.basicConfig(filename='neuro-connector-api.log', level=logging.DEBUG,
                         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
@@ -209,6 +208,15 @@ class NeuroConnector:
 
     def buildGenericTriggerPayload(self, projectKey, branch, commitId, label, environmentName, environmentType,
                                    vcsProject):
+
+        assert projectKey is not None, "projectKey needed"
+        assert branch is not None, "branch needed"
+        assert commitId is not None, "commitId needed"
+        assert label is not None, "label needed"
+        assert environmentName is not None, "environmentName needed"
+        assert environmentType is not None, "environmentType needed"
+        assert vcsProject is not None, "vcsProject needed"
+
         return {
             "organization": self.organizationId,
             "url": self.url,
