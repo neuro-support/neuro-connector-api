@@ -392,7 +392,7 @@ class Orchestrator:
     def orchestrate(self):
         parameterPairs=self.getParameterPairsForArgs()
 
-        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(parameterPairs.keys()) != 0, "\n\nSee instructions\n"+self.instructions
+        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(parameterPairs.keys()) >= 3, "\n\nSee instructions\n"+self.instructions
         assert "--func" in parameterPairs, "function param needed --func\n" + self.instructions
 
         function = parameterPairs["--func"]
