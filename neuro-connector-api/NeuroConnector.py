@@ -101,7 +101,7 @@ class NeuroConnector:
         timestamp = self.getEpochTime()
 
         if jobNumber is None:
-            jobNumber = str(timestamp)
+            jobNumber = str(timestamp[:-3])
             id = str(jobName) + "_" + str(timestamp)
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
