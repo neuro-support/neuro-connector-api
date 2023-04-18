@@ -107,11 +107,7 @@ class NeuroConnector:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
 
         return {
-            "actions": [
-                {
-                    "testResult": results
-                }
-            ],
+
             "displayName": "#" + jobNumber,
             "duration": 0,
             "estimatedDuration": duration,
@@ -122,7 +118,12 @@ class NeuroConnector:
             "projectName": str(jobName),
             "result": self.getResult(results),
             "timestamp": timestamp,
-            "url": self.url
+            "url": self.url,
+            "actions": [
+                {
+                    "testResult": results
+                }
+            ]
         }
 
     def encodeStringForURL(self, string):
