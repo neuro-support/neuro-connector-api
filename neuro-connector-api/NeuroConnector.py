@@ -40,7 +40,7 @@ class NeuroConnector:
             token = None
 
         self.requestWrapper = RequestWrapper(token=token,
-                                             url=url)
+                                             url=self.url)
 
         assert self.requestWrapper, "couldn't initiate request wrapper"
 
