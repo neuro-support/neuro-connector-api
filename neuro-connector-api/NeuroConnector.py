@@ -27,10 +27,12 @@ class NeuroConnector:
     jobNumber = None
     projectName = None
 
-    def __init__(self, url, organizationId, appToken=None):
+    def __init__(self,url, organizationId, appToken=None):
 
-        assert url, "need neuro base url"
-        self.url = url
+        if url is None:
+            self.url = "https://app.myneuro.ai"
+        else:
+            self.url = url
 
         if appToken:
             token = "Bearer " + appToken
