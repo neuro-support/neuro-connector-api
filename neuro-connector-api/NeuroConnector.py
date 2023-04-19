@@ -369,9 +369,9 @@ class Orchestrator:
                 "--branch=", "--commitId=", "--label=", "--env=", "--envType=", "--help"]
 
         self.instructions= '\n-h, --help : Help\n'
-        self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --path [filePath] --url [baseUrl (optional)] --org [organizationId] --jobName [jobName] --jobNum [jobNumber (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2  --url [baseUrl (optional)] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]\n'
-        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 3 --url [baseUrl (optional)] --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client]\n'
+        self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)] --url [baseUrl (optional)]\n'
+        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
+        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
 
     def getParameterPairsForArgs(self):
         parameterPairs = {}
