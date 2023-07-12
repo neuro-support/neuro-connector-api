@@ -49,21 +49,6 @@ class NeuroConnector:
         self.organizationId = organizationId
         assert self.organizationId, "organizationId missing"
 
-    def delete_record(self, key):
-        o = {}
-        o['webhookEvent'] = 'jira:issue_deleted'
-        o['issue'] = {'key': key, 'id': key}
-        o['testId'] = key
-        o['externalProject'] = "TEST"
-        o['connectionId'] = self.connectionId
-        o['organization'] = self.organizationId
-        payload = o
-        print(payload)
-        endpoint = "/ms-provision-receptor/zfjcloud/v2/webhook/" + self.connectionId
-        print(endpoint)
-
-        self.send_webhook(endpoint, payload)
-
     def send_webhook(self, endpoint, payload):
         # endpoint = "/ms-provision-receptor/custom/zephyr/zephyr-f-cloud-controller"
         self.requestWrapper.make(endpoint=endpoint, payload=payload, types="POST")
@@ -82,15 +67,6 @@ class NeuroConnector:
 
     def getEpochTime(self):
         return str(int(time.time() * 1000))
-
-    def deleteData(self):
-        logging.info("deleting existing data")
-        endpoint = '/ms-provision-receptor/custom/zephyr/remove-data/' + self.organizationId + '/' + self.connectionId
-
-        response = self.requestWrapper.make(endpoint=endpoint, types="DELETE")
-        logging.info(response[1]['status'] + " deleting data")
-
-        return response
 
     def parseJSONfile(self, filepath):
         assert filepath is not None, "filepath required"
@@ -129,9 +105,6 @@ class NeuroConnector:
                 }
             ]
         }
-
-    def encodeStringForURL(self, string):
-        return urllib.parse.quote(string)
 
     def sendCucumberTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
@@ -375,7 +348,7 @@ class Orchestrator:
 
         self.instructions = '\n-h, --help : Help\n'
         self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)] --url [baseUrl (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage] --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the git project] --repositoryName [repo name]\n'
+        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage] --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]\n'
         self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projName [projectName, e.g jira/management] --branch [branchName] --repositoryName [repositoryName] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
 
     def getParameterPairsForArgs(self):
