@@ -16,8 +16,9 @@ NeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobN
         --url [baseUrl (optional)]
 
 Function 2 (releaseTrigger)
-NeuroConnector --func 2 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject]
-        --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)]
+NeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage]
+        --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]
+        
  
 Function 3 (deploymentTrigger)
 NeuroConnector --func 3 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject]

@@ -12,6 +12,7 @@ import datetime
 import urllib.parse
 from datetime import datetime as dt
 
+
 class NeuroConnector:
     logging.getLogger("neuro-connector-api").propagate = False
     logging.basicConfig(filename='neuro-connector-api.log', level=logging.DEBUG,
@@ -26,8 +27,9 @@ class NeuroConnector:
     jobName = None
     jobNumber = None
     projectName = None
+    custom = {}
 
-    def __init__(self,url, organizationId, appToken=None):
+    def __init__(self, url, organizationId, appToken=None):
 
         if url is None:
             self.url = "https://app.myneuro.ai"
@@ -47,21 +49,6 @@ class NeuroConnector:
         self.organizationId = organizationId
         assert self.organizationId, "organizationId missing"
 
-    def delete_record(self, key):
-        o = {}
-        o['webhookEvent'] = 'jira:issue_deleted'
-        o['issue'] = {'key': key, 'id': key}
-        o['testId'] = key
-        o['externalProject'] = "TEST"
-        o['connectionId'] = self.connectionId
-        o['organization'] = self.organizationId
-        payload = o
-        print(payload)
-        endpoint = "/ms-provision-receptor/zfjcloud/v2/webhook/" + self.connectionId
-        print(endpoint)
-
-        self.send_webhook(endpoint, payload)
-
     def send_webhook(self, endpoint, payload):
         # endpoint = "/ms-provision-receptor/custom/zephyr/zephyr-f-cloud-controller"
         self.requestWrapper.make(endpoint=endpoint, payload=payload, types="POST")
@@ -80,15 +67,6 @@ class NeuroConnector:
 
     def getEpochTime(self):
         return str(int(time.time() * 1000))
-
-    def deleteData(self):
-        logging.info("deleting existing data")
-        endpoint = '/ms-provision-receptor/custom/zephyr/remove-data/' + self.organizationId + '/' + self.connectionId
-
-        response = self.requestWrapper.make(endpoint=endpoint, types="DELETE")
-        logging.info(response[1]['status'] + " deleting data")
-
-        return response
 
     def parseJSONfile(self, filepath):
         assert filepath is not None, "filepath required"
@@ -128,9 +106,6 @@ class NeuroConnector:
             ]
         }
 
-    def encodeStringForURL(self, string):
-        return urllib.parse.quote(string)
-
     def sendCucumberTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
         print("Sending webhook for cucumber test results to " + self.url)
@@ -142,7 +117,7 @@ class NeuroConnector:
         self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendTriggerWebhook(self, payload):
-        endpoint = "/???"
+        endpoint = "/ms-source-mediator/custom/release_and_deployment/webhook/receive"
         self.send_webhook(endpoint=endpoint, payload=payload)
 
     def getResult(self, results):
@@ -189,42 +164,43 @@ class NeuroConnector:
     #                         if 'result' in step:
     #                             if 'duration' in step['result']:
     #                                 duration = duration + int(step['result']['duration'])
-    def releaseTrigger(self, projectKey, branch, commitId, label, environmentName, environmentType, vcsProject):
-        payload = self.buildGenericTriggerPayload(projectKey, branch, commitId, label, environmentName, environmentType,
-                                                  vcsProject)
+    def releaseTrigger(self, issueKey, projectName, branch, repositoryName, label, environmentName, environmentType):
+        payload = self.buildGenericTriggerPayload(issueKey, projectName, branch, repositoryName, label, environmentName,
+                                                  environmentType)
         payload["triggerType"] = "release"
         print("Sending webhook for release trigger to " + self.url)
         self.sendTriggerWebhook(payload)
 
-    def deploymentTrigger(self, projectKey, branch, commitId, label, environmentName, environmentType, vcsProject):
-        payload = self.buildGenericTriggerPayload(projectKey, branch, commitId, label, environmentName, environmentType,
-                                                  vcsProject)
+    def deploymentTrigger(self, projectName, branch, repositoryName, label, environmentName, environmentType):
+        payload = self.buildGenericTriggerPayload(projectName, branch, repositoryName, label, environmentName,
+                                                  environmentType)
+
         payload["triggerType"] = "deployment"
         print("Sending webhook for deployment trigger to " + self.url)
         self.sendTriggerWebhook(payload)
 
-    def buildGenericTriggerPayload(self, projectKey, branch, commitId, label, environmentName, environmentType,
-                                   vcsProject):
+    def buildGenericTriggerPayload(self, issueKey, projectName, branch, repositoryName, label, environmentName,
+                                   environmentType):
 
-        assert projectKey is not None, "projectKey needed"
+        assert issueKey is not None, "issueKey needed"
+        assert projectName is not None, "projectName needed"
         assert branch is not None, "branch needed"
-        assert commitId is not None, "commitId needed"
+        assert repositoryName is not None, "repositoryName needed"
         assert label is not None, "label needed"
         assert environmentName is not None, "environmentName needed"
         assert environmentType is not None, "environmentType needed"
-        assert vcsProject is not None, "vcsProject needed"
 
         return {
-            "organization": self.organizationId,
-            "url": self.url,
-            "timestamp": self.getEpochTime(),
-            'projectKey': projectKey,
-            'branch': branch,
-            'commitId': commitId,
-            'label': label,
+            'branchId': branch,
+            'custom': self.custom,
+            "dateCreated": self.formatCurrentDateTime(),
             'environmentName': environmentName,
             'environmentType': environmentType,
-            'vcsProject': vcsProject
+            "issueKey": issueKey,
+            'label': label,
+            'organization': self.organizationId,
+            'projectName': projectName,
+            'repositoryName': repositoryName
         }
 
 
@@ -341,7 +317,7 @@ class Orchestrator:
     logging.basicConfig(filename='neuro-connector-api.log', level=logging.INFO,
                         format='%(asctime)s %(levelname)-8s %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
-    opts=[]
+    opts = []
 
     # common
     organizationId = None
@@ -354,24 +330,26 @@ class Orchestrator:
     jobName = None
 
     # Function 2 (releaseTrigger) & Function 3 (deploymentTrigger)
-    projectKey = None
+    issueKey = None
+    projectName = None
     branch = None
-    commitId = None
+    repositoryName = None
     label = None
     environmentName = None
     environmentType = None
-    vcsProject = None
+    triggerType = None
 
     def __init__(self, args):
 
         self.args = args
-        self.opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--projKey=", "--vcsProj=",
-                "--branch=", "--commitId=", "--label=", "--env=", "--envType=", "--help"]
+        self.opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--issueKey=",
+                     "--projName=",
+                     "--branch=", "--repositoryName=", "--label=", "--env=", "--envType=", "--help"]
 
-        self.instructions= '\n-h, --help : Help\n'
+        self.instructions = '\n-h, --help : Help\n'
         self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)] --url [baseUrl (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject] --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
+        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage] --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]\n'
+        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projName [projectName, e.g jira/management] --branch [branchName] --repositoryName [repositoryName] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
 
     def getParameterPairsForArgs(self):
         parameterPairs = {}
@@ -390,11 +368,11 @@ class Orchestrator:
 
         return parameterPairs
 
-
     def orchestrate(self):
-        parameterPairs=self.getParameterPairsForArgs()
+        parameterPairs = self.getParameterPairsForArgs()
 
-        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(parameterPairs.keys()) >= 3, "\n\nSee instructions\n"+self.instructions
+        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(
+            parameterPairs.keys()) >= 3, "\n\nSee instructions\n" + self.instructions
         assert "--func" in parameterPairs, "function param needed --func\n" + self.instructions
 
         function = parameterPairs["--func"]
@@ -418,29 +396,31 @@ class Orchestrator:
                     self.organizationId = parameterPairs[key]
                 elif key == "--url":
                     self.baseUrl = parameterPairs[key]
-                elif key == "--projKey":
-                    self.projectKey = parameterPairs[key]
+                elif key == "--issueKey":
+                    self.issueKey = parameterPairs[key]
+                elif key == "--projName":
+                    self.projectName = parameterPairs[key]
                 elif key == "--branch":
                     self.branch = parameterPairs[key]
-                elif key == "--commitId":
-                    self.commitId = parameterPairs[key]
+                elif key == "--repositoryName":
+                    self.repositoryName = parameterPairs[key]
                 elif key == "--label":
                     self.label = parameterPairs[key]
                 elif key == "--env":
                     self.environmentName = parameterPairs[key]
                 elif key == "--envType":
                     self.environmentType = parameterPairs[key]
-                elif key == "--vcsProj":
-                    self.vcsProject = parameterPairs[key]
 
         try:
             nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
             if str(function) == '1':
                 nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
             elif str(function) == '2':
-                nc.releaseTrigger(self.projectKey, self.branch, self.commitId, self.label, self.environmentName, self.environmentType, self.vcsProject)
+                nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
+                                  self.environmentName, self.environmentType)
             elif str(function) == '3':
-                nc.deploymentTrigger(self.projectKey, self.branch, self.commitId, self.label, self.environmentName, self.environmentType, self.vcsProject)
+                nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
+                                     self.environmentName, self.environmentType)
             else:
                 print(self.instructions, file=sys.stderr)
                 raise Exception("function not defined")
