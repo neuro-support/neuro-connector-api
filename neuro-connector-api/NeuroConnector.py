@@ -11,6 +11,7 @@ import requests
 import datetime
 import urllib.parse
 from datetime import datetime as dt
+import argparse
 
 
 class NeuroConnector:
@@ -71,7 +72,7 @@ class NeuroConnector:
     def parseJSONfile(self, filepath):
         assert filepath is not None, "filepath required"
         payload = ''
-        with open(filepath, encoding='utf-8') as json_file:
+        with open(filepath, 'rb') as json_file:
             payload = json.load(json_file)
         return payload
 
@@ -105,6 +106,165 @@ class NeuroConnector:
                 }
             ]
         }
+    
+    def buildPytestResultWebhookPayload(self, results, jobName, jobNumber):
+        if results['duration']:
+            duration = results['duration']
+        else:
+            duration=0
+        
+        timestamp = self.getEpochTime()
+        
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getPytestResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+        
+        if results['created']:
+            created_timestamp=results['created']
+        else:
+            created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            "timestamp": created_timestamp,
+            "projectName": str(jobName),
+            "tests": tests
+            }
+    
+    def buildMochaResultWebhookPayload(self, results, jobName, jobNumber):
+        if results['stats']['duration']:
+            duration = results['stats']['duration']
+        else:
+            duration=0
+        
+        timestamp = self.getEpochTime()
+        
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getMochaResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+        
+        if results['stats']['start']:
+            created_timestamp=dt.strptime(results['stats']['start'], "%Y-%m-%dT%H:%M:%S.%fZ").timestamp()*1000
+        else:
+            created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            "timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
+    
+    def getPytestResults(self,results):
+        tests=[]
+        
+
+        for test in results['tests']:
+            tests_temp={
+            "title": "",
+            "duration": 0,
+            "result": "",
+            "custom": {}
+                }
+            tests_temp['title']=test['nodeid'].split('::')[-1]
+            tests_temp['duration']=test['setup']['duration']+test['call']['duration']+test['teardown']['duration']
+            tests_temp['result']=test['outcome']
+            tests_temp['custom']['keywords']=test['keywords']
+            tests.append(tests_temp)
+        
+        return tests
+    
+    def getMochaResults(self,results):
+        tests=[]
+
+        if results.get('results'):
+            for result in results['results']:
+                if result['suites']:
+                    for s in result['suites']:
+                        tests_temp={
+                                "title": "",
+                                "duration": 0,
+                                "result": "",
+                                "custom":{}
+                                    }
+                        tests_temp['custom']['suite_title']=s['title']
+                        tests_temp['duration']=s['duration']
+                        if s['tests']:
+                            for test in s['tests']:
+                                tests_temp['title']=test['title']
+                                tests_temp['result'] =test['state']
+                                if test['err']:
+                                    tests_temp['custom']['error']=test['err']
+                                tests.append(tests_temp)
+        if results.get('tests'):
+                if results['failures']:
+                    for failed_case in results['failures']:
+                        tests_temp={
+                            "title": "",
+                            "duration": 0,
+                            "result": "",
+                            "custom":{}
+                                }
+                        tests_temp['title']=failed_case['title']
+                        tests_temp['duration']=failed_case['duration']
+                        tests_temp['result']='failed'
+                        if failed_case['err']:
+                            tests_temp['custom']['error']=failed_case['err']
+                        tests_temp['custom']['fulltitle']=failed_case['fullTitle']
+                        tests.append(tests_temp)
+                if results['passes']:
+                    for passed_case in results['passes']:
+                        tests_temp={
+                            "title": "",
+                            "duration": 0,
+                            "result": "",
+                            "custom":{}
+                                }
+                        tests_temp['title']=passed_case['title']
+                        tests_temp['duration']=passed_case['duration']
+                        tests_temp['result']='passed'
+                        tests_temp['custom']['fulltitle']=passed_case['fullTitle']
+                        tests.append(tests_temp)
+                if results['pending']:
+                    for pending_case in results['pending']:
+                        tests_temp={
+                            "title": "",
+                            "duration": 0,
+                            "result": "",
+                            "custom":{}
+                                }
+                        tests_temp['title']=pending_case['title']
+                        tests_temp['duration']=pending_case['duration']
+                        tests_temp['result']='pending'
+                        tests_temp['custom']['fulltitle']=pending_case['fullTitle']
+                        tests.append(tests_temp)
+        
+        return tests
+
 
     def sendCucumberTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
@@ -115,6 +275,44 @@ class NeuroConnector:
         payload = self.buildTestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
         self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendPytestTestResultsJson(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for pytest test results to " + self.url)
+
+        results = self.parseJSONfile(filePath)
+
+        payload = self.buildPytestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing. 
+        print('$$$$$$$$$$$$$$$$$$$$')
+        print(payload)
+        with open('sample_test_reports\payload_pytest.json', 'w') as f:
+            json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        #self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendMochaTestResultsJson(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for Mocha test results to " + self.url)
+
+        results = self.parseJSONfile(filePath)
+
+        payload = self.buildMochaResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing. 
+        print('$$$$$$$$$$$$$$$$$$$$')
+        print(payload)
+        with open('sample_test_reports\payload_mocha_suits.json', 'w') as f:
+            json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        #self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendTriggerWebhook(self, payload):
         endpoint = "/ms-source-mediator/custom/release_and_deployment/webhook/receive"
@@ -338,93 +536,57 @@ class Orchestrator:
     environmentName = None
     environmentType = None
     triggerType = None
+    
+    def __init__(self):
+        self.parse_arguments()
+    
+    def parse_arguments(self):
 
-    def __init__(self, args):
+        parser = argparse.ArgumentParser(
+                    prog='python3 -m neuro-connector-api.NeuroConnector',
+                    description='A CLI to push release metrics by connecting to Neuro')
+        parser.add_argument('functions', type=str, help='function to be performed. ex, sendCucumberResults, releaseTrigger or deploymentTrigger')
+        parser.add_argument('org', type=str, help='organization id of Neuro')
+        parser.add_argument('jobname', type=str, help='jobname')
+        parser.add_argument('path', type=str, help='path of test report file')
+        parser.add_argument('--jobNum', type=str, help='Job Number')
+        
+        args = parser.parse_args()
 
-        self.args = args
-        self.opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--issueKey=",
-                     "--projName=",
-                     "--branch=", "--repositoryName=", "--label=", "--env=", "--envType=", "--help"]
-
-        self.instructions = '\n-h, --help : Help\n'
-        self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)] --url [baseUrl (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage] --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]\n'
-        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projName [projectName, e.g jira/management] --branch [branchName] --repositoryName [repositoryName] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
-
-    def getParameterPairsForArgs(self):
-        parameterPairs = {}
-        for i, arg in enumerate(self.args):
-            for opt in self.opts:
-                if opt[-1] == "=" and opt[:-1] == arg:
-                    try:
-                        value = self.args[i + 1]
-                        assert value is not None and not value.startswith("-")
-                    except:
-                        raise Exception("no value for key " + arg)
-
-                    parameterPairs.update({arg: value})
-                elif arg == opt and opt[-1] != "=":
-                    parameterPairs.update({arg: None})
-
-        return parameterPairs
+        self.function=args.functions
+        self.organizationId=args.org
+        self.jobName=args.jobname
+        self.filePath=args.path
+        self.jobName=args.jobname
 
     def orchestrate(self):
-        parameterPairs = self.getParameterPairsForArgs()
-
-        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(
-            parameterPairs.keys()) >= 3, "\n\nSee instructions\n" + self.instructions
-        assert "--func" in parameterPairs, "function param needed --func\n" + self.instructions
-
-        function = parameterPairs["--func"]
-
-        if str(function) == '1':
-            for key in parameterPairs.keys():
-                if key == "--org":
-                    self.organizationId = parameterPairs[key]
-                elif key == "--url":
-                    self.baseUrl = parameterPairs[key]
-                elif key == "--path":
-                    self.filePath = parameterPairs[key]
-                elif key == "--jobName":
-                    self.jobName = parameterPairs[key]
-                elif key == "--jobNum":
-                    self.jobNumber = parameterPairs[key]
-
-        elif str(function) in ['2', '3']:
-            for key in parameterPairs.keys():
-                if key == "--org":
-                    self.organizationId = parameterPairs[key]
-                elif key == "--url":
-                    self.baseUrl = parameterPairs[key]
-                elif key == "--issueKey":
-                    self.issueKey = parameterPairs[key]
-                elif key == "--projName":
-                    self.projectName = parameterPairs[key]
-                elif key == "--branch":
-                    self.branch = parameterPairs[key]
-                elif key == "--repositoryName":
-                    self.repositoryName = parameterPairs[key]
-                elif key == "--label":
-                    self.label = parameterPairs[key]
-                elif key == "--env":
-                    self.environmentName = parameterPairs[key]
-                elif key == "--envType":
-                    self.environmentType = parameterPairs[key]
-
+    
         try:
             nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
-            if str(function) == '1':
-                nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
-            elif str(function) == '2':
-                nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
-                                  self.environmentName, self.environmentType)
-            elif str(function) == '3':
-                nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
-                                     self.environmentName, self.environmentType)
-            else:
-                print(self.instructions, file=sys.stderr)
-                raise Exception("function not defined")
+            
+            match(str(self.function)):
+                    case 'sendCucumberResults':
+                        nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
 
+                    case 'sendPytestResults':
+                        nc.sendPytestTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+                    
+                    case 'sendMochaResults':
+                        nc.sendMochaTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+
+                    case 'releaseTrigger':
+                        nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
+                                    self.environmentName, self.environmentType)
+                        
+                    case 'deploymentTrigger':
+                        nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
+                                        self.environmentName, self.environmentType)
+                    #case 'sendTestNGResults':
+                    #case 'sendJunitResults':
+                    
+                    case _:
+                        raise Exception(self.function + " function not defined")
+    
         except Exception as e:
             print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
             logging.error(traceback.format_exc())
@@ -433,4 +595,5 @@ class Orchestrator:
 
 
 if __name__ == "__main__":
-    Orchestrator(args=sys.argv[1:]).orchestrate()
+    #Orchestrator(args=sys.argv[1:]).orchestrate()
+    Orchestrator().orchestrate()
