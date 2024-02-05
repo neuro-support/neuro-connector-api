@@ -200,19 +200,17 @@ class NeuroConnector:
     
     def getMochaResults(self,results):
         tests=[]
-
+        tests_temp={}
+        
         if results.get('results'):
             for result in results['results']:
                 if result['suites']:
                     for s in result['suites']:
                         tests_temp={
-                                "title": "",
-                                "duration": 0,
-                                "result": "",
-                                "custom":{}
-                                    }
-                        tests_temp['custom']['suite_title']=s['title']
-                        tests_temp['duration']=s['duration']
+                            'custom': {
+                                'suite_title': s['title']},
+                            'duration':s['duration']
+                        }
                         if s['tests']:
                             for test in s['tests']:
                                 tests_temp['title']=test['title']
@@ -220,47 +218,55 @@ class NeuroConnector:
                                 if test['err']:
                                     tests_temp['custom']['error']=test['err']
                                 tests.append(tests_temp)
+                if result['tests']:
+                    for t in result['tests']:
+                        tests_temp={
+                            'duration': t['duration'],
+                            'title'   : t['title'],
+                            'result'  : t['state'],
+                            'custom'  : {
+                                      'fulltitle' :  t['fullTitle']
+                            }
+                        }
+                        if t['err']:
+                            tests_temp['custom']['error']=t['err']
+                        tests.append(tests_temp)                        
+
         if results.get('tests'):
                 if results['failures']:
                     for failed_case in results['failures']:
                         tests_temp={
-                            "title": "",
-                            "duration": 0,
-                            "result": "",
-                            "custom":{}
-                                }
-                        tests_temp['title']=failed_case['title']
-                        tests_temp['duration']=failed_case['duration']
-                        tests_temp['result']='failed'
+                                    'title'    : failed_case['title'],
+                                    'duration' : failed_case['duration'],
+                                    'result'   : 'failed',
+                                    'custom'   : {
+                                                'fulltitle' : failed_case['fullTitle']
+                                                 }
+                                    }
                         if failed_case['err']:
                             tests_temp['custom']['error']=failed_case['err']
-                        tests_temp['custom']['fulltitle']=failed_case['fullTitle']
                         tests.append(tests_temp)
                 if results['passes']:
                     for passed_case in results['passes']:
                         tests_temp={
-                            "title": "",
-                            "duration": 0,
-                            "result": "",
-                            "custom":{}
-                                }
-                        tests_temp['title']=passed_case['title']
-                        tests_temp['duration']=passed_case['duration']
-                        tests_temp['result']='passed'
-                        tests_temp['custom']['fulltitle']=passed_case['fullTitle']
+                                    'title'    : passed_case['title'],
+                                    'duration' : passed_case['duration'],
+                                    'result'   :'passed',
+                                    'custom'   : {
+                                                'fulltitle' : passed_case['fullTitle']
+                                                 }
+                                    }
                         tests.append(tests_temp)
                 if results['pending']:
                     for pending_case in results['pending']:
-                        tests_temp={
-                            "title": "",
-                            "duration": 0,
-                            "result": "",
-                            "custom":{}
-                                }
-                        tests_temp['title']=pending_case['title']
-                        tests_temp['duration']=pending_case['duration']
-                        tests_temp['result']='pending'
-                        tests_temp['custom']['fulltitle']=pending_case['fullTitle']
+                        tests_temp ={
+                                    'title'    : pending_case['title'],
+                                    'duration' : pending_case['duration'],
+                                    'result'   : 'pending',
+                                    'custom'   : {
+                                        'fulltitle' : pending_case['fullTitle']
+                                    }
+                        }
                         tests.append(tests_temp)
         
         return tests
@@ -306,7 +312,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\payload_mocha_suits.json', 'w') as f:
+        with open('sample_test_reports\payload_mocha_tests1.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -550,6 +556,7 @@ class Orchestrator:
         parser.add_argument('jobname', type=str, help='jobname')
         parser.add_argument('path', type=str, help='path of test report file')
         parser.add_argument('--jobNum', type=str, help='Job Number')
+
         
         args = parser.parse_args()
 
@@ -564,28 +571,27 @@ class Orchestrator:
         try:
             nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
             
-            match(str(self.function)):
-                    case 'sendCucumberResults':
-                        nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+            if str(self.function) == 'sendCucumberResults':
+                nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
 
-                    case 'sendPytestResults':
-                        nc.sendPytestTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+            elif str(self.function) == 'sendPytestResults':
+                nc.sendPytestTestResultsJson(self.filePath, self.jobName, self.jobNumber)
                     
-                    case 'sendMochaResults':
-                        nc.sendMochaTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+            elif str(self.function) =='sendMochaResults':
+                nc.sendMochaTestResultsJson(self.filePath, self.jobName, self.jobNumber)
 
-                    case 'releaseTrigger':
-                        nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
+            elif str(self.function) == 'releaseTrigger':
+                nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
                                     self.environmentName, self.environmentType)
                         
-                    case 'deploymentTrigger':
-                        nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
+            elif str(self.function) == 'deploymentTrigger':
+                nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
                                         self.environmentName, self.environmentType)
-                    #case 'sendTestNGResults':
-                    #case 'sendJunitResults':
+            #elif str(str.function) == 'sendTestNGResults':
+            #elif str(str.function) == 'sendJunitResults':
                     
-                    case _:
-                        raise Exception(self.function + " function not defined")
+            else:
+                raise Exception(self.function + " function not defined")
     
         except Exception as e:
             print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
