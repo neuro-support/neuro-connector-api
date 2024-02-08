@@ -12,6 +12,8 @@ import datetime
 import urllib.parse
 from datetime import datetime as dt
 import argparse
+import xmltodict
+import os
 
 
 class NeuroConnector:
@@ -74,6 +76,17 @@ class NeuroConnector:
         payload = ''
         with open(filepath, 'rb') as json_file:
             payload = json.load(json_file)
+        return payload
+
+    def parseXMLfile(self, filepath):
+        assert filepath is not None, "filepath required"
+        payload = ''
+
+        with open(filepath, 'r') as file:
+            xml_content = file.read()
+        
+        payload=xmltodict.parse(xml_content)
+
         return payload
 
     def buildTestResultWebhookPayload(self, results, jobName, jobNumber):
@@ -178,6 +191,91 @@ class NeuroConnector:
             "projectName": str(jobName),
             "tests": tests
             }
+
+    def buildTestNGResultPayload(self, results, jobName, jobNumber):
+
+        print(results)
+        print(type(results))
+        duration=0
+        if type(results['testng-results']['suite']) is list:
+            for s in results['testng-results']['suite']:
+                if s['@duration-ms']:
+                    duration=duration+int(s['@duration-ms'])
+                else:
+                    duration=duration+0
+        else:
+            if results['testng-results']['suite']['@duration-ms']:
+                duration = results['testng-results']['suite']['@duration-ms']
+            else:
+                duration=0
+        
+        timestamp = self.getEpochTime()
+        
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getTestNGResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+        
+        if results['testng-results']['suite']['@started-at']:
+            if ' ' in results['testng-results']['suite']['@started-at']:
+                date_timestamp=results['testng-results']['suite']['@started-at'].split(' ')[0]
+                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
+            else:
+                date_timestamp=results['testng-results']['suite']['@started-at']
+                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        else:
+            created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            "timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
+    
+    def buildJunitResultPayload(self, results, jobName, jobNumber):
+
+        if results['testsuite']['@time']:
+            duration = results['testsuite']['@time']
+        else:
+            duration=0
+        
+        timestamp = self.getEpochTime()
+        
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getJunitResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+        
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            #"timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
     
     def getPytestResults(self,results):
         tests=[]
@@ -185,15 +283,13 @@ class NeuroConnector:
 
         for test in results['tests']:
             tests_temp={
-            "title": "",
-            "duration": 0,
-            "result": "",
-            "custom": {}
+                'title' : test['nodeid'].split('::')[-1],
+                'duration' : test['setup']['duration']+test['call']['duration']+test['teardown']['duration'],
+                'result' :  test['outcome'],
+                'custom':{
+                    'keywords' : test['keywords']
                 }
-            tests_temp['title']=test['nodeid'].split('::')[-1]
-            tests_temp['duration']=test['setup']['duration']+test['call']['duration']+test['teardown']['duration']
-            tests_temp['result']=test['outcome']
-            tests_temp['custom']['keywords']=test['keywords']
+            }
             tests.append(tests_temp)
         
         return tests
@@ -271,6 +367,94 @@ class NeuroConnector:
         
         return tests
 
+    def getTestNGResults(self,results):
+        tests=[]                    
+
+        if type(results['testng-results']['suite']['test']['class']['test-method']) is list:
+            for test in results['testng-results']['suite']['test']['class']['test-method']:
+                tests_temp= { 
+                'custom':{
+                    'suitename': results['testng-results']['suite']['@name'],
+                    'testname': results['testng-results']['suite']['test']['@name'],
+                    'classname': results['testng-results']['suite']['test']['class']['@name']
+                }
+        }
+                tests_temp['title']= test['@name']
+                tests_temp['duration'] = test['@duration-ms']
+                tests_temp['result'] =  test['@status']
+                
+                if test.get('exception'):
+                    tests_temp['custom']['exception']=test['exception']
+                tests.append(tests_temp)
+        else:
+            tests_temp= { 
+                'custom':{
+                    'suitename': results['testng-results']['suite']['@name'],
+                    'testname': results['testng-results']['suite']['test']['@name'],
+                    'classname': results['testng-results']['suite']['test']['class']['@name']
+                }
+        }
+            tests_temp['title']= results['testng-results']['suite']['test']['class']['test-method']['@name']
+            tests_temp['duration']= results['testng-results']['suite']['test']['class']['test-method']['@duration-ms']
+            tests_temp['result'] = results['testng-results']['suite']['test']['class']['test-method']['@status']
+
+            if results['testng-results']['suite']['test']['class']['test-method'].get('exception'):
+                tests_temp['custom']['exception']=results['testng-results']['suite']['test']['class']['test-method']['exception']
+            tests.append(tests_temp)   
+
+        return tests
+    
+    def getJunitResults(self,results):
+        tests=[]
+        print(type(results['testsuite']['testcase']))
+      
+        if type(results['testsuite']['testcase']) is list:
+            for test in results['testsuite']['testcase']:
+                tests_temp={
+                    'title': test['@name'],
+                    'duration': test['@time'],
+                    'custom' : {
+                        'classname': test['@classname']
+                    }
+                }
+                if test.get('skipped'):
+                    tests_temp['custom']['skipped']=test['skipped']
+                    tests_temp['result']='skipped'
+                elif test.get('failure '):
+                    tests_temp['custom']['failure']=test['failure']
+                    tests_temp['result'] = 'failed'
+                elif test.get('error'):
+                    tests_temp['custom']['error']=test['error']
+                    tests_temp['result']='error'
+                else:
+                    tests_temp['result']='passed'
+                tests.append(tests_temp)
+
+        else:
+            tests_temp={
+                    'title': results['testsuite']['testcase']['@name'],
+                    'duration': results['testsuite']['testcase']['@time'],
+                    'custom' : {
+                        'classname': results['testsuite']['testcase']['@classname']
+                    }
+            }
+            if results['testsuite']['testcase'].get('skipped'):
+                tests_temp['custom']['skipped']=results['testsuite']['testcase']['skipped']
+                tests_temp['result']='skipped'
+            elif results['testsuite']['testcase'].get('failure'):
+                tests_temp['result']='failure'
+                tests_temp['custom']['failure']=results['testsuite']['testcase']['failure']
+            elif results['testsuite']['testcase'].get('error'):
+                tests_temp['custom']['error']=results['testsuite']['testcase']['error']
+                tests_temp['result']='error'
+            else:
+                tests_temp['result']='passed'
+            
+            tests.append(tests_temp)
+
+
+        return tests
+
 
     def sendCucumberTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
@@ -293,7 +477,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\payload_pytest.json', 'w') as f:
+        with open('sample_test_reports\output\pytest\payload_pytest.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -312,13 +496,71 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\payload_mocha_tests1.json', 'w') as f:
+        with open('sample_test_reports\output\Mocha\payload_mocha_test2.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
         #self.send_webhook(endpoint=endpoint, payload=payload)
+    
+    def sendTestNGResults(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for TestNG test results to " + self.url)
+
+        results = self.parseXMLfile(filePath)
+
+        payload = self.buildTestNGResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing. 
+        print('$$$$$$$$$$$$$$$$$$$$')
+        print(payload)
+        with open('sample_test_reports\output\TestNG\payload_testNG4.json', 'w') as f:
+            json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        #self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendJunitResults(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for Mocha test results to " + self.url)
+
+        if os.path.isdir(filePath):
+            files = os.listdir(filePath)
+            for file in files:
+                print(file)
+                results = self.parseXMLfile(filePath+file)
+
+                payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+                #remove below block writing payload to a file. only for testing. 
+                print('$$$$$$$$$$$$$$$$$$$$')
+                print(payload)
+                with open('sample_test_reports\payload' + file+'.json', 'w') as f:
+                    json.dump(payload,f, indent=4)
+
+
+                endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+                #uncomment the below line once the endpoint is ready for testing
+                #self.send_webhook(endpoint=endpoint, payload=payload)
+        else :
+
+                results = self.parseXMLfile(filePath, function)
+
+                payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+                #remove below block writing payload to a file. only for testing. 
+                print('$$$$$$$$$$$$$$$$$$$$')
+                print(payload)
+                with open('sample_test_reports\payload_JUnit1.json', 'w') as f:
+                    json.dump(payload,f, indent=4)
+
+
+                endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+                #uncomment the below line once the endpoint is ready for testing
+                #self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendTriggerWebhook(self, payload):
         endpoint = "/ms-source-mediator/custom/release_and_deployment/webhook/receive"
@@ -556,6 +798,7 @@ class Orchestrator:
         parser.add_argument('jobname', type=str, help='jobname')
         parser.add_argument('path', type=str, help='path of test report file')
         parser.add_argument('--jobNum', type=str, help='Job Number')
+        parser.add_argument('--url', type=str, help='neuro url')
 
         
         args = parser.parse_args()
@@ -565,6 +808,7 @@ class Orchestrator:
         self.jobName=args.jobname
         self.filePath=args.path
         self.jobName=args.jobname
+        self.baseUrl=args.url
 
     def orchestrate(self):
     
@@ -587,8 +831,12 @@ class Orchestrator:
             elif str(self.function) == 'deploymentTrigger':
                 nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
                                         self.environmentName, self.environmentType)
-            #elif str(str.function) == 'sendTestNGResults':
-            #elif str(str.function) == 'sendJunitResults':
+            
+            elif str(self.function) == 'sendTestNGResults':
+                nc.sendTestNGResults(self.filePath, self.jobName, self.jobNumber)
+            
+            elif str(self.function) == 'sendJunitResults':
+                nc.sendJunitResults(self.filePath, self.jobName, self.jobNumber)
                     
             else:
                 raise Exception(self.function + " function not defined")
