@@ -583,7 +583,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\output\pytest\payload_pytest.json', 'w') as f:
+        with open('sample_test_reports\output_d0902\pytest\payload_pytest.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -602,7 +602,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\output\Mocha\payload_mocha_test2.json', 'w') as f:
+        with open('sample_test_reports\output_d0902\Mocha\payload_mocha_suite1.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -621,7 +621,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\output\TestNG\payload_testNG4_1.json', 'w') as f:
+        with open('sample_test_reports\output_d0902\Testng/testng-results.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -644,7 +644,7 @@ class NeuroConnector:
                 #remove below block writing payload to a file. only for testing. 
                 print('$$$$$$$$$$$$$$$$$$$$')
                 print(payload)
-                with open('sample_test_reports\payload' + file+'.json', 'w') as f:
+                with open('sample_test_reports\output_d0902\Junit/' + file+'.json', 'w') as f:
                     json.dump(payload,f, indent=4)
 
 
@@ -905,7 +905,16 @@ class Orchestrator:
         parser.add_argument('path', type=str, help='path of test report file')
         parser.add_argument('--jobNum', type=str, help='Job Number')
         parser.add_argument('--url', type=str, help='neuro url')
+        parser.add_argument('--env', type=str, help='environment, ex., stage. REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--envType', type=str, help='environment type. ex., test, REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--branch', type=str, help='branch name. REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--issueKey', type=str, help='jira key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--projName', type=str, help='The name of the neuro module. key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--label', type=str, help='Free text field. key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--repositoryName', type=str, help='repository name. REQUIRED for releaseTrigger and deploymentTrigger')
 
+        #It is better to use sub_parser. But I see deploymentTrigger and releaseTrigger are calling a generic trigger function.
+        #arguements passed are different in each case. would need some changes here.
         
         args = parser.parse_args()
 
@@ -915,6 +924,14 @@ class Orchestrator:
         self.filePath=args.path
         self.jobName=args.jobname
         self.baseUrl=args.url
+        self.jobNumber=args.jobNum
+        self.environmentType=args.envType
+        self.environmentName=args.env
+        self.projectName=args.projName
+        self.label=args.label
+        self.repositoryName=args.repositoryName
+        self.issueKey=args.issueKey
+        self.branch=args.branch
 
     def orchestrate(self):
     
