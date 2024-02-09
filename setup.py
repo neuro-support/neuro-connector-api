@@ -8,5 +8,5 @@ setup(
    author='Ben Hesketh',
    author_email='support@myneuro.ai',
    packages=['neuro-connector-api'],  #same as name
-   install_requires=['wheel', 'bar', 'greek','urllib3','requests'], #external packages as dependencies
+   install_requires=['wheel', 'bar', 'greek','urllib3','requests', 'xmltodict'], #external packages as dependencies
 )

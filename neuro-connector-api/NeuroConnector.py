@@ -653,7 +653,7 @@ class NeuroConnector:
                 #self.send_webhook(endpoint=endpoint, payload=payload)
         else :
 
-                results = self.parseXMLfile(filePath, function)
+                results = self.parseXMLfile(filePath)
 
                 payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
