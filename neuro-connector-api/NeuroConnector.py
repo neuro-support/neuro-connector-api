@@ -223,15 +223,15 @@ class NeuroConnector:
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
         
-        if results['testng-results']['suite']['@started-at']:
-            if ' ' in results['testng-results']['suite']['@started-at']:
-                date_timestamp=results['testng-results']['suite']['@started-at'].split(' ')[0]
-                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
-            else:
-                date_timestamp=results['testng-results']['suite']['@started-at']
-                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
-        else:
-            created_timestamp=0
+        # if type(results['testng-results']['suite']['@started-at']) is list:
+        #     if ' ' in results['testng-results']['suite']['@started-at']:
+        #         date_timestamp=results['testng-results']['suite']['@started-at'].split(' ')[0]
+        #         created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
+        #     else:
+        #         date_timestamp=results['testng-results']['suite']['@started-at']
+        #         created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        # else:
+        #     created_timestamp=0
 
         return {
             "organization": self.organizationId,
@@ -239,7 +239,7 @@ class NeuroConnector:
             "number": int(jobNumber),
             "duration": duration,
             "dateCreated": date_time,
-            "timestamp": str(int(created_timestamp)),
+            #"timestamp": str(int(created_timestamp)),
             "projectName": str(jobName),
             "tests": tests
             }
@@ -366,40 +366,146 @@ class NeuroConnector:
                         tests.append(tests_temp)
         
         return tests
+    
+    def buildTestData(self, suitename, start_date, testname, classname, test_method_name, duration, status, exception=None):
+        tests_temp= { 
+                    'custom':{
+                        'suitename': suitename,
+                        'testname' : testname,
+                        'classname': classname
+                        },
+                    'title':test_method_name,
+                    'duration': duration,
+                    'result': status
+                    }
+        if ' ' in start_date:
+                date_timestamp=start_date.split(' ')[0]
+                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
+        else:
+                created_timestamp=dt.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        tests_temp['created_timestamp'] = created_timestamp
+        
+        if exception:
+            tests_temp['custom']['exception']=exception
+        return tests_temp
+
 
     def getTestNGResults(self,results):
         tests=[]                    
 
-        if type(results['testng-results']['suite']['test']['class']['test-method']) is list:
-            for test in results['testng-results']['suite']['test']['class']['test-method']:
-                tests_temp= { 
-                'custom':{
-                    'suitename': results['testng-results']['suite']['@name'],
-                    'testname': results['testng-results']['suite']['test']['@name'],
-                    'classname': results['testng-results']['suite']['test']['class']['@name']
-                }
-        }
-                tests_temp['title']= test['@name']
-                tests_temp['duration'] = test['@duration-ms']
-                tests_temp['result'] =  test['@status']
-                
-                if test.get('exception'):
-                    tests_temp['custom']['exception']=test['exception']
+        if type(results['testng-results']['suite']) is list:
+            for suite in results['testng-results']['suite']:
+                if suite.get('test'):
+                    if type(suite['test']) is list:
+                        for test in suite['test']:
+                            if type(test['class']) is list:
+                                for clas in test['class']:
+                                    tests_temp['custom']['classname']=clas['@name']
+                                    if clas['test-method'] is list:
+                                        for test_method in clas[test_method]:
+                                            tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'], 
+                                                                           test_method['@name'], test_method['@duration-ms'], 
+                                                                           test_method['@status'], test_method.get('exception') )
+                                            tests.append(tests_temp)
+                                    else: 
+                                        tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'], 
+                                                                      clas['test_method']['@name'], clas['test_method']['@duration-ms'], 
+                                                                    clas['test_method']['@status'], clas['test_method'].get('exception')  )
+                                        tests.append(tests_temp)
+                            elif type(test['class']['test-method']) is list:
+                                for test_method in test['class']['test-method']:
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'], 
+                                                                   test_method['@name'], test_method['@duration-ms'], 
+                                                                   test_method['@status'], test_method.get('exception'))
+                            else:
+                                tests_temp =  self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'],
+                                                    test['class']['test-method']['@name'],test['class']['test-method']['@duration-ms'], 
+                                                    test['class']['test-method']['@status'],test['class']['test-method'].get('exception') )
+                                tests.append(tests_temp)
+                    elif type(suite['test']['class']) is list:
+                        tests_temp['custom']['testname']=suite['test']['@name']
+                        for clas in suite['test']['class']:
+                            tests_temp['custom']['classname']=clas['@name']
+                            if clas['test-method'] is list:
+                                for test_method in clas[test_method]:
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'], 
+                                                                   test_method['@name'],test_method['@duration-ms'], 
+                                                                   test_method['@status'], test_method.get('exception')   )
+                                    tests.append(tests_temp)
+                            else:
+                                tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'], 
+                                                               clas['test-method']['@name'], clas['test-method']['@duration-ms'], 
+                                                               clas['test-method']['@status'], clas['test-method'].get('exception'))
+                                tests.append(tests_temp)
+                    elif type(suite['test']['class']['test-method']) is list:
+                        for test_method in suite['test']['class']['test-method']:
+                            tests_temp=self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'], 
+                                                          test_method['@name'],test_method['@duration-ms'], test_method['@status'], 
+                                                          test_method.get('exception'))
+                            tests.append(tests_temp)
+                    else:
+                        tests_temp=self.buildTestData(suite['@name'], suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'], 
+                                    suite['test']['class']['test-method']['@name'],suite['test']['class']['test-method']['@duration-ms'], suite['test']['class']['test-method']['@status'], 
+                                    suite['test']['class']['test-method'].get('exception'))
+                        tests.append(tests_temp)
+        elif type(results['testng-results']['suite']['test']) is list:
+            for test in results['testng-results']['suite']['test']:
+                if type(test['class']) is list:
+                    for clas in test['class']:
+                        if type(clas['test-method']) is list:
+                            for test_method in clas['test-method']:
+                                tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], test_method['@name'],
+                                                              test_method['@duration-ms'], test_method['@status'], test_method.get('exception'))
+                                tests.append(tests_temp)
+                        else:
+                            tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], clas['test-method']['@name'],
+                                                          clas['test-method']['@duration-ms'], clas['test-method']['@status'], 
+                                                          clas['test-method'].get('exception'))
+                            tests.append(tests_temp)
+                elif type(test['class']['test-method']) is list:
+                    for test_method in test['class']['test-method']:
+                        tests_temp=self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], test['class']['test-method']['@name'],
+                                                    test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
+                                                    test['class']['test-method'].get('exception') )
+                else:
+                    tests_temp = self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], 
+                            test['class']['test-method']['@name'], test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
+                            test['class']['test-method'].get('exception')
+                    )
+                    tests.append(tests_temp)     
+        elif type(results['testng-results']['suite']['test']['class']) is list:
+            for clas in results['testng-results']['suite']['test']['class']:
+                if type(clas['test-method']) is list:
+                    for test_method in clas['test-method']:
+                        tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                                      results['testng-results']['suite']['test']['@name'], clas['@name'], 
+                                                      test_method['@name'], test_method['@duration-ms'], test_method['@status'],
+                                                      test_method.get('exception')
+                                                      )
+                        tests.append(tests_temp)    
+                else:
+                    tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                                results['testng-results']['suite']['test']['@name'], clas['@name'], 
+                                                clas['test-method']['@name'], clas['test-method']['@duration-ms'],
+                                                clas['test-method']['@status'], clas['test-method'].get('exception')
+                                                )
+                    tests.append(tests_temp)
+
+        elif type(results['testng-results']['suite']['test']['class']['test-method']) is list:      
+            for test_method in results['testng-results']['suite']['test']['class']['test-method']:
+                tests_temp = self.buildTestData( results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                        results['testng-results']['suite']['test']['@name'],
+                        results['testng-results']['suite']['test']['class']['@name'], test_method['@name'], test_method['@duration-ms'],
+                        test_method['@status'], test_method.get('exception'))
                 tests.append(tests_temp)
         else:
-            tests_temp= { 
-                'custom':{
-                    'suitename': results['testng-results']['suite']['@name'],
-                    'testname': results['testng-results']['suite']['test']['@name'],
-                    'classname': results['testng-results']['suite']['test']['class']['@name']
-                }
-        }
-            tests_temp['title']= results['testng-results']['suite']['test']['class']['test-method']['@name']
-            tests_temp['duration']= results['testng-results']['suite']['test']['class']['test-method']['@duration-ms']
-            tests_temp['result'] = results['testng-results']['suite']['test']['class']['test-method']['@status']
-
-            if results['testng-results']['suite']['test']['class']['test-method'].get('exception'):
-                tests_temp['custom']['exception']=results['testng-results']['suite']['test']['class']['test-method']['exception']
+            tests_temp = self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                            results['testng-results']['suite']['test']['@name'],
+                    results['testng-results']['suite']['test']['class']['@name'],  results['testng-results']['suite']['test']['class']['test-method']['@name'],
+                    results['testng-results']['suite']['test']['class']['test-method']['@duration-ms'], 
+                    results['testng-results']['suite']['test']['class']['test-method']['@status'],
+                    results['testng-results']['suite']['test']['class']['test-method'].get('exception')
+            )
             tests.append(tests_temp)   
 
         return tests
@@ -515,7 +621,7 @@ class NeuroConnector:
         #remove below block writing payload to a file. only for testing. 
         print('$$$$$$$$$$$$$$$$$$$$')
         print(payload)
-        with open('sample_test_reports\output\TestNG\payload_testNG4.json', 'w') as f:
+        with open('sample_test_reports\output\TestNG\payload_testNG4_1.json', 'w') as f:
             json.dump(payload,f, indent=4)
 
 
@@ -791,7 +897,7 @@ class Orchestrator:
     def parse_arguments(self):
 
         parser = argparse.ArgumentParser(
-                    prog='python3 -m neuro-connector-api.NeuroConnector',
+                    prog='python3 neuro-connector-api.NeuroConnector',
                     description='A CLI to push release metrics by connecting to Neuro')
         parser.add_argument('functions', type=str, help='function to be performed. ex, sendCucumberResults, releaseTrigger or deploymentTrigger')
         parser.add_argument('org', type=str, help='organization id of Neuro')
