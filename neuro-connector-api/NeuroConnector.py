@@ -587,7 +587,7 @@ class NeuroConnector:
             json.dump(payload,f, indent=4)
 
 
-        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
         #self.send_webhook(endpoint=endpoint, payload=payload)
 
@@ -600,15 +600,15 @@ class NeuroConnector:
         payload = self.buildMochaResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
         #remove below block writing payload to a file. only for testing. 
-        print('$$$$$$$$$$$$$$$$$$$$')
-        print(payload)
-        with open('sample_test_reports\output_d0902\Mocha\payload_mocha_suite1.json', 'w') as f:
-            json.dump(payload,f, indent=4)
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\Mocha\payload_mocha_suite1.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
 
 
-        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
-        #self.send_webhook(endpoint=endpoint, payload=payload)
+        self.send_webhook(endpoint=endpoint, payload=payload)
     
     def sendTestNGResults(self, filePath,
                                     jobName, jobNumber=None):
@@ -625,7 +625,7 @@ class NeuroConnector:
             json.dump(payload,f, indent=4)
 
 
-        endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
         #self.send_webhook(endpoint=endpoint, payload=payload)
 
@@ -664,7 +664,7 @@ class NeuroConnector:
                     json.dump(payload,f, indent=4)
 
 
-                endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+                endpoint = "/ms-source-mediator/automation-test/webhook/receive"
                 #uncomment the below line once the endpoint is ready for testing
                 #self.send_webhook(endpoint=endpoint, payload=payload)
 
