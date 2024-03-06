@@ -48,9 +48,6 @@ python3 NeuroConnector.py --func releaseTrigger --org 123321123321123321 --issue
 
 7. deploymentTrigger
 python3 NeuroConnector.py --func deploymentTrigger --org 123321123321123321 --projectName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --environmentName Stage --environmentType Test
-
-   
-
 ```
 
 # IGNORE THESE FUNCTIONS
