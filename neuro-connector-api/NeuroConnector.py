@@ -614,7 +614,7 @@ class NeuroConnector:
                                     jobName, jobNumber=None):
         print("Sending webhook for TestNG test results to " + self.url)
 
-        results = self.parseXMLfile(filePath)
+        results = self.parseJSONfile(filePath)
 
         payload = self.buildTestNGResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
