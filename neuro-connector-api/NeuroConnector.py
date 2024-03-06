@@ -899,10 +899,10 @@ class Orchestrator:
         parser = argparse.ArgumentParser(
                     prog='python3 neuro-connector-api.NeuroConnector',
                     description='A CLI to push release metrics by connecting to Neuro')
-        parser.add_argument('functions', type=str, help='function to be performed. ex, sendCucumberResults, releaseTrigger or deploymentTrigger')
-        parser.add_argument('org', type=str, help='organization id of Neuro')
-        parser.add_argument('jobname', type=str, help='jobname')
-        parser.add_argument('path', type=str, help='path of test report file')
+        parser.add_argument('--functions', type=str, help='function to be performed. ex, sendCucumberResults, releaseTrigger or deploymentTrigger')
+        parser.add_argument('--org', type=str, help='organization id of Neuro')
+        parser.add_argument('--jobname', type=str, help='jobname')
+        parser.add_argument('--path', type=str, help='path of test report file')
         parser.add_argument('--jobNum', type=str, help='Job Number')
         parser.add_argument('--url', type=str, help='neuro url')
         parser.add_argument('--env', type=str, help='environment, ex., stage. REQUIRED for releaseTrigger and deploymentTrigger function')
