@@ -619,15 +619,15 @@ class NeuroConnector:
         payload = self.buildTestNGResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
         #remove below block writing payload to a file. only for testing. 
-        print('$$$$$$$$$$$$$$$$$$$$')
-        print(payload)
-        with open('sample_test_reports\output_d0902\Testng/testng-results.json', 'w') as f:
-            json.dump(payload,f, indent=4)
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\Testng/testng-results.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
 
 
         endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
-        #self.send_webhook(endpoint=endpoint, payload=payload)
+        self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendJunitResults(self, filePath,
                                     jobName, jobNumber=None):
