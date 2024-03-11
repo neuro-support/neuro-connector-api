@@ -84,7 +84,7 @@ class NeuroConnector:
 
         with open(filepath, 'r') as file:
             xml_content = file.read()
-        
+
         payload=xmltodict.parse(xml_content)
 
         return payload
@@ -119,15 +119,15 @@ class NeuroConnector:
                 }
             ]
         }
-    
+
     def buildPytestResultWebhookPayload(self, results, jobName, jobNumber):
         if results['duration']:
             duration = results['duration']
         else:
             duration=0
-        
+
         timestamp = self.getEpochTime()
-        
+
         date_time=self.formatCurrentDateTime()
         print(date_time)
 
@@ -139,7 +139,7 @@ class NeuroConnector:
             id = str(jobName) + "_" + str(timestamp)
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
-        
+
         if results['created']:
             created_timestamp=results['created']
         else:
@@ -155,15 +155,15 @@ class NeuroConnector:
             "projectName": str(jobName),
             "tests": tests
             }
-    
+
     def buildMochaResultWebhookPayload(self, results, jobName, jobNumber):
         if results['stats']['duration']:
             duration = results['stats']['duration']
         else:
             duration=0
-        
+
         timestamp = self.getEpochTime()
-        
+
         date_time=self.formatCurrentDateTime()
         print(date_time)
 
@@ -175,7 +175,7 @@ class NeuroConnector:
             id = str(jobName) + "_" + str(timestamp)
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
-        
+
         if results['stats']['start']:
             created_timestamp=dt.strptime(results['stats']['start'], "%Y-%m-%dT%H:%M:%S.%fZ").timestamp()*1000
         else:
@@ -208,9 +208,9 @@ class NeuroConnector:
                 duration = results['testng-results']['suite']['@duration-ms']
             else:
                 duration=0
-        
+
         timestamp = self.getEpochTime()
-        
+
         date_time=self.formatCurrentDateTime()
         print(date_time)
 
@@ -222,7 +222,7 @@ class NeuroConnector:
             id = str(jobName) + "_" + str(timestamp)
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
-        
+
         # if type(results['testng-results']['suite']['@started-at']) is list:
         #     if ' ' in results['testng-results']['suite']['@started-at']:
         #         date_timestamp=results['testng-results']['suite']['@started-at'].split(' ')[0]
@@ -243,16 +243,17 @@ class NeuroConnector:
             "projectName": str(jobName),
             "tests": tests
             }
-    
+
     def buildJunitResultPayload(self, results, jobName, jobNumber):
 
         if results['testsuite']['@time']:
             duration = results['testsuite']['@time']
+            durationMS = int(float(duration)) * 1000
         else:
-            duration=0
-        
+            durationMS = 0
+
         timestamp = self.getEpochTime()
-        
+
         date_time=self.formatCurrentDateTime()
         print(date_time)
 
@@ -264,40 +265,40 @@ class NeuroConnector:
             id = str(jobName) + "_" + str(timestamp)
         else:
             id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
-        
+
 
         return {
             "organization": self.organizationId,
             "displayName": "#"+str(jobName),
             "number": int(jobNumber),
-            "duration": duration,
+            "duration": durationMS,
             "dateCreated": date_time,
             #"timestamp": str(int(created_timestamp)),
             "projectName": str(jobName),
             "tests": tests
             }
-    
+
     def getPytestResults(self,results):
         tests=[]
-        
+
 
         for test in results['tests']:
             tests_temp={
                 'title' : test['nodeid'].split('::')[-1],
-                'duration' : test['setup']['duration']+test['call']['duration']+test['teardown']['duration'],
+                'duration' : (test['setup']['duration']+test['call']['duration']+test['teardown']['duration']) * 1000,
                 'result' :  test['outcome'],
                 'custom':{
                     'keywords' : test['keywords']
                 }
             }
             tests.append(tests_temp)
-        
+
         return tests
-    
+
     def getMochaResults(self,results):
         tests=[]
         tests_temp={}
-        
+
         if results.get('results'):
             for result in results['results']:
                 if result['suites']:
@@ -326,7 +327,7 @@ class NeuroConnector:
                         }
                         if t['err']:
                             tests_temp['custom']['error']=t['err']
-                        tests.append(tests_temp)                        
+                        tests.append(tests_temp)
 
         if results.get('tests'):
                 if results['failures']:
@@ -364,11 +365,11 @@ class NeuroConnector:
                                     }
                         }
                         tests.append(tests_temp)
-        
+
         return tests
-    
+
     def buildTestData(self, suitename, start_date, testname, classname, test_method_name, duration, status, exception=None):
-        tests_temp= { 
+        tests_temp= {
                     'custom':{
                         'suitename': suitename,
                         'testname' : testname,
@@ -384,14 +385,14 @@ class NeuroConnector:
         else:
                 created_timestamp=dt.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
         tests_temp['created_timestamp'] = created_timestamp
-        
+
         if exception:
             tests_temp['custom']['exception']=exception
         return tests_temp
 
 
     def getTestNGResults(self,results):
-        tests=[]                    
+        tests=[]
 
         if type(results['testng-results']['suite']) is list:
             for suite in results['testng-results']['suite']:
@@ -403,23 +404,23 @@ class NeuroConnector:
                                     tests_temp['custom']['classname']=clas['@name']
                                     if clas['test-method'] is list:
                                         for test_method in clas[test_method]:
-                                            tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'], 
-                                                                           test_method['@name'], test_method['@duration-ms'], 
+                                            tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
+                                                                           test_method['@name'], test_method['@duration-ms'],
                                                                            test_method['@status'], test_method.get('exception') )
                                             tests.append(tests_temp)
-                                    else: 
-                                        tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'], 
-                                                                      clas['test_method']['@name'], clas['test_method']['@duration-ms'], 
+                                    else:
+                                        tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
+                                                                      clas['test_method']['@name'], clas['test_method']['@duration-ms'],
                                                                     clas['test_method']['@status'], clas['test_method'].get('exception')  )
                                         tests.append(tests_temp)
                             elif type(test['class']['test-method']) is list:
                                 for test_method in test['class']['test-method']:
-                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'], 
-                                                                   test_method['@name'], test_method['@duration-ms'], 
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'],
+                                                                   test_method['@name'], test_method['@duration-ms'],
                                                                    test_method['@status'], test_method.get('exception'))
                             else:
                                 tests_temp =  self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'],
-                                                    test['class']['test-method']['@name'],test['class']['test-method']['@duration-ms'], 
+                                                    test['class']['test-method']['@name'],test['class']['test-method']['@duration-ms'],
                                                     test['class']['test-method']['@status'],test['class']['test-method'].get('exception') )
                                 tests.append(tests_temp)
                     elif type(suite['test']['class']) is list:
@@ -428,24 +429,24 @@ class NeuroConnector:
                             tests_temp['custom']['classname']=clas['@name']
                             if clas['test-method'] is list:
                                 for test_method in clas[test_method]:
-                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'], 
-                                                                   test_method['@name'],test_method['@duration-ms'], 
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'],
+                                                                   test_method['@name'],test_method['@duration-ms'],
                                                                    test_method['@status'], test_method.get('exception')   )
                                     tests.append(tests_temp)
                             else:
-                                tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'], 
-                                                               clas['test-method']['@name'], clas['test-method']['@duration-ms'], 
+                                tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'],
+                                                               clas['test-method']['@name'], clas['test-method']['@duration-ms'],
                                                                clas['test-method']['@status'], clas['test-method'].get('exception'))
                                 tests.append(tests_temp)
                     elif type(suite['test']['class']['test-method']) is list:
                         for test_method in suite['test']['class']['test-method']:
-                            tests_temp=self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'], 
-                                                          test_method['@name'],test_method['@duration-ms'], test_method['@status'], 
+                            tests_temp=self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'],
+                                                          test_method['@name'],test_method['@duration-ms'], test_method['@status'],
                                                           test_method.get('exception'))
                             tests.append(tests_temp)
                     else:
-                        tests_temp=self.buildTestData(suite['@name'], suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'], 
-                                    suite['test']['class']['test-method']['@name'],suite['test']['class']['test-method']['@duration-ms'], suite['test']['class']['test-method']['@status'], 
+                        tests_temp=self.buildTestData(suite['@name'], suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'],
+                                    suite['test']['class']['test-method']['@name'],suite['test']['class']['test-method']['@duration-ms'], suite['test']['class']['test-method']['@status'],
                                     suite['test']['class']['test-method'].get('exception'))
                         tests.append(tests_temp)
         elif type(results['testng-results']['suite']['test']) is list:
@@ -459,7 +460,7 @@ class NeuroConnector:
                                 tests.append(tests_temp)
                         else:
                             tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], clas['test-method']['@name'],
-                                                          clas['test-method']['@duration-ms'], clas['test-method']['@status'], 
+                                                          clas['test-method']['@duration-ms'], clas['test-method']['@status'],
                                                           clas['test-method'].get('exception'))
                             tests.append(tests_temp)
                 elif type(test['class']['test-method']) is list:
@@ -468,30 +469,30 @@ class NeuroConnector:
                                                     test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
                                                     test['class']['test-method'].get('exception') )
                 else:
-                    tests_temp = self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], 
+                    tests_temp = self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'],
                             test['class']['test-method']['@name'], test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
                             test['class']['test-method'].get('exception')
                     )
-                    tests.append(tests_temp)     
+                    tests.append(tests_temp)
         elif type(results['testng-results']['suite']['test']['class']) is list:
             for clas in results['testng-results']['suite']['test']['class']:
                 if type(clas['test-method']) is list:
                     for test_method in clas['test-method']:
                         tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
-                                                      results['testng-results']['suite']['test']['@name'], clas['@name'], 
+                                                      results['testng-results']['suite']['test']['@name'], clas['@name'],
                                                       test_method['@name'], test_method['@duration-ms'], test_method['@status'],
                                                       test_method.get('exception')
                                                       )
-                        tests.append(tests_temp)    
+                        tests.append(tests_temp)
                 else:
                     tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
-                                                results['testng-results']['suite']['test']['@name'], clas['@name'], 
+                                                results['testng-results']['suite']['test']['@name'], clas['@name'],
                                                 clas['test-method']['@name'], clas['test-method']['@duration-ms'],
                                                 clas['test-method']['@status'], clas['test-method'].get('exception')
                                                 )
                     tests.append(tests_temp)
 
-        elif type(results['testng-results']['suite']['test']['class']['test-method']) is list:      
+        elif type(results['testng-results']['suite']['test']['class']['test-method']) is list:
             for test_method in results['testng-results']['suite']['test']['class']['test-method']:
                 tests_temp = self.buildTestData( results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
                         results['testng-results']['suite']['test']['@name'],
@@ -502,18 +503,18 @@ class NeuroConnector:
             tests_temp = self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
                                             results['testng-results']['suite']['test']['@name'],
                     results['testng-results']['suite']['test']['class']['@name'],  results['testng-results']['suite']['test']['class']['test-method']['@name'],
-                    results['testng-results']['suite']['test']['class']['test-method']['@duration-ms'], 
+                    results['testng-results']['suite']['test']['class']['test-method']['@duration-ms'],
                     results['testng-results']['suite']['test']['class']['test-method']['@status'],
                     results['testng-results']['suite']['test']['class']['test-method'].get('exception')
             )
-            tests.append(tests_temp)   
+            tests.append(tests_temp)
 
         return tests
-    
+
     def getJunitResults(self,results):
         tests=[]
         print(type(results['testsuite']['testcase']))
-      
+
         if type(results['testsuite']['testcase']) is list:
             for test in results['testsuite']['testcase']:
                 tests_temp={
@@ -555,7 +556,7 @@ class NeuroConnector:
                 tests_temp['result']='error'
             else:
                 tests_temp['result']='passed'
-            
+
             tests.append(tests_temp)
 
 
@@ -580,16 +581,16 @@ class NeuroConnector:
 
         payload = self.buildPytestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
-        #remove below block writing payload to a file. only for testing. 
-        print('$$$$$$$$$$$$$$$$$$$$')
-        print(payload)
-        with open('sample_test_reports\output_d0902\pytest\payload_pytest.json', 'w') as f:
-            json.dump(payload,f, indent=4)
+        #remove below block writing payload to a file. only for testing.
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\pytest\payload_pytest.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
 
 
         endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
-        #self.send_webhook(endpoint=endpoint, payload=payload)
+        self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendMochaTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
@@ -599,7 +600,7 @@ class NeuroConnector:
 
         payload = self.buildMochaResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
-        #remove below block writing payload to a file. only for testing. 
+        #remove below block writing payload to a file. only for testing.
         # print('$$$$$$$$$$$$$$$$$$$$')
         # print(payload)
         # with open('sample_test_reports\output_d0902\Mocha\payload_mocha_suite1.json', 'w') as f:
@@ -609,7 +610,7 @@ class NeuroConnector:
         endpoint = "/ms-source-mediator/automation-test/webhook/receive"
         #uncomment the below line once the endpoint is ready for testing
         self.send_webhook(endpoint=endpoint, payload=payload)
-    
+
     def sendTestNGResults(self, filePath,
                                     jobName, jobNumber=None):
         print("Sending webhook for TestNG test results to " + self.url)
@@ -618,7 +619,7 @@ class NeuroConnector:
 
         payload = self.buildTestNGResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
-        #remove below block writing payload to a file. only for testing. 
+        #remove below block writing payload to a file. only for testing.
         # print('$$$$$$$$$$$$$$$$$$$$')
         # print(payload)
         # with open('sample_test_reports\output_d0902\Testng/testng-results.json', 'w') as f:
@@ -631,7 +632,7 @@ class NeuroConnector:
 
     def sendJunitResults(self, filePath,
                                     jobName, jobNumber=None):
-        print("Sending webhook for Mocha test results to " + self.url)
+        print("Sending webhook for JUnit test results to " + self.url)
 
         if os.path.isdir(filePath):
             files = os.listdir(filePath)
@@ -641,32 +642,32 @@ class NeuroConnector:
 
                 payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
-                #remove below block writing payload to a file. only for testing. 
-                print('$$$$$$$$$$$$$$$$$$$$')
-                print(payload)
-                with open('sample_test_reports\output_d0902\Junit/' + file+'.json', 'w') as f:
-                    json.dump(payload,f, indent=4)
+                #remove below block writing payload to a file. only for testing.
+                # print('$$$$$$$$$$$$$$$$$$$$')
+                # print(payload)
+                # with open('sample_test_reports\output_d0902\Junit/' + file+'.json', 'w') as f:
+                #     json.dump(payload,f, indent=4)
 
 
-                endpoint = "/ms-source-mediator/cucumber/webhook/receive"
+                endpoint = "/ms-source-mediator/automation-test/webhook/receive"
                 #uncomment the below line once the endpoint is ready for testing
-                #self.send_webhook(endpoint=endpoint, payload=payload)
+                self.send_webhook(endpoint=endpoint, payload=payload)
         else :
 
                 results = self.parseXMLfile(filePath)
 
                 payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
 
-                #remove below block writing payload to a file. only for testing. 
-                print('$$$$$$$$$$$$$$$$$$$$')
-                print(payload)
-                with open('sample_test_reports\payload_JUnit1.json', 'w') as f:
-                    json.dump(payload,f, indent=4)
+                #remove below block writing payload to a file. only for testing.
+                # print('$$$$$$$$$$$$$$$$$$$$')
+                # print(payload)
+                # with open('sample_test_reports\payload_JUnit1.json', 'w') as f:
+                #     json.dump(payload,f, indent=4)
 
 
                 endpoint = "/ms-source-mediator/automation-test/webhook/receive"
                 #uncomment the below line once the endpoint is ready for testing
-                #self.send_webhook(endpoint=endpoint, payload=payload)
+                self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendTriggerWebhook(self, payload):
         endpoint = "/ms-source-mediator/custom/release_and_deployment/webhook/receive"
@@ -890,10 +891,10 @@ class Orchestrator:
     environmentName = None
     environmentType = None
     triggerType = None
-    
+
     def __init__(self):
         self.parse_arguments()
-    
+
     def parse_arguments(self):
 
         parser = argparse.ArgumentParser(
@@ -915,7 +916,7 @@ class Orchestrator:
 
         #It is better to use sub_parser. But I see deploymentTrigger and releaseTrigger are calling a generic trigger function.
         #arguements passed are different in each case. would need some changes here.
-        
+
         args = parser.parse_args()
 
         self.function=args.functions
@@ -934,36 +935,36 @@ class Orchestrator:
         self.branch=args.branch
 
     def orchestrate(self):
-    
+
         try:
             nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
-            
+
             if str(self.function) == 'sendCucumberResults':
                 nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
 
             elif str(self.function) == 'sendPytestResults':
                 nc.sendPytestTestResultsJson(self.filePath, self.jobName, self.jobNumber)
-                    
+
             elif str(self.function) =='sendMochaResults':
                 nc.sendMochaTestResultsJson(self.filePath, self.jobName, self.jobNumber)
 
             elif str(self.function) == 'releaseTrigger':
                 nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
                                     self.environmentName, self.environmentType)
-                        
+
             elif str(self.function) == 'deploymentTrigger':
                 nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
                                         self.environmentName, self.environmentType)
-            
+
             elif str(self.function) == 'sendTestNGResults':
                 nc.sendTestNGResults(self.filePath, self.jobName, self.jobNumber)
-            
+
             elif str(self.function) == 'sendJunitResults':
                 nc.sendJunitResults(self.filePath, self.jobName, self.jobNumber)
-                    
+
             else:
                 raise Exception(self.function + " function not defined")
-    
+
         except Exception as e:
             print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
             logging.error(traceback.format_exc())
