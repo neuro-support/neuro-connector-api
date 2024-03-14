@@ -49,18 +49,3 @@ python3 NeuroConnector.py --func releaseTrigger --org 123321123321123321 --issue
 7. deploymentTrigger
 python3 NeuroConnector.py --func deploymentTrigger --org 123321123321123321 --projectName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --environmentName Stage --environmentType Test
 ```
-
-# IGNORE THESE FUNCTIONS
-
-Function 1 (sendTestResultsJson) 
-NeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)]
-        --url [baseUrl (optional)]
-
-Function 2 (releaseTrigger)
-NeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage]
-        --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]
-        
- 
-Function 3 (deploymentTrigger)
-NeuroConnector --func 3 --org [organizationId] --projKey [projectKey, e.g jira/management] --vcsProj [vcsProject]
-        --branch [branchName] --commitId [commitId] --label [type label, e.g ms/client] --url [baseUrl (optional)] 
