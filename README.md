@@ -44,8 +44,8 @@ python3 NeuroConnector.py --func sendTestNGResults --org 1233211233211233211233 
 python3 NeuroConnector.py --func sendJunitResults --org 1233211233211233211233 --path junit.json --jobname jobNameExample --url https://app.myneuro.ai
 
 6. releaseTrigger
-python3 NeuroConnector.py --func releaseTrigger --org 123321123321123321 --issueKey NC-123421 --projectName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --environmentName Stage --environmentType Test
+python3 NeuroConnector.py --func releaseTrigger --org 123321123321123321 --issueKey NC-123421 --projName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --env Stage --envType Test
 
 7. deploymentTrigger
-python3 NeuroConnector.py --func deploymentTrigger --org 123321123321123321 --projectName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --environmentName Stage --environmentType Test
+python3 NeuroConnector.py --func deploymentTrigger --org 123321123321123321 --projName neuroModuleName --branch branchName --repositoryName repoName --label myCustomLabel --environmentName Stage --envType Test
 ```

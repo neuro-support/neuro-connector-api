@@ -907,7 +907,7 @@ class Orchestrator:
         parser.add_argument('--jobNum', type=str, help='Job Number')
         parser.add_argument('--url', type=str, help='neuro url')
         parser.add_argument('--env', type=str, help='environment, ex., stage. REQUIRED for releaseTrigger and deploymentTrigger function')
-        parser.add_argument('--envType', type=str, help='environment type. ex., test, REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--environmentType', type=str, help='environment type. ex., test, REQUIRED for releaseTrigger and deploymentTrigger function')
         parser.add_argument('--branch', type=str, help='branch name. REQUIRED for releaseTrigger and deploymentTrigger function')
         parser.add_argument('--issueKey', type=str, help='jira key REQUIRED for releaseTrigger and deploymentTrigger function')
         parser.add_argument('--projName', type=str, help='The name of the neuro module. key REQUIRED for releaseTrigger and deploymentTrigger function')
@@ -926,7 +926,7 @@ class Orchestrator:
         self.jobName=args.jobname
         self.baseUrl=args.url
         self.jobNumber=args.jobNum
-        self.environmentType=args.envType
+        self.environmentType=args.environmentType
         self.environmentName=args.env
         self.projectName=args.projName
         self.label=args.label
