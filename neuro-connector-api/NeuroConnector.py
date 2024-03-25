@@ -11,6 +11,9 @@ import requests
 import datetime
 import urllib.parse
 from datetime import datetime as dt
+import argparse
+import xmltodict
+import os
 
 
 class NeuroConnector:
@@ -71,8 +74,19 @@ class NeuroConnector:
     def parseJSONfile(self, filepath):
         assert filepath is not None, "filepath required"
         payload = ''
-        with open(filepath, encoding='utf-8') as json_file:
+        with open(filepath, 'rb') as json_file:
             payload = json.load(json_file)
+        return payload
+
+    def parseXMLfile(self, filepath):
+        assert filepath is not None, "filepath required"
+        payload = ''
+
+        with open(filepath, 'r') as file:
+            xml_content = file.read()
+
+        payload=xmltodict.parse(xml_content)
+
         return payload
 
     def buildTestResultWebhookPayload(self, results, jobName, jobNumber):
@@ -106,6 +120,449 @@ class NeuroConnector:
             ]
         }
 
+    def buildPytestResultWebhookPayload(self, results, jobName, jobNumber):
+        if results['duration']:
+            duration = results['duration']
+        else:
+            duration=0
+
+        timestamp = self.getEpochTime()
+
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getPytestResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+
+        if results['created']:
+            created_timestamp=results['created']
+        else:
+            created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            "timestamp": created_timestamp,
+            "projectName": str(jobName),
+            "tests": tests
+            }
+
+    def buildMochaResultWebhookPayload(self, results, jobName, jobNumber):
+        if results['stats']['duration']:
+            duration = results['stats']['duration']
+        else:
+            duration=0
+
+        timestamp = self.getEpochTime()
+
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getMochaResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+
+        if results['stats']['start']:
+            created_timestamp=dt.strptime(results['stats']['start'], "%Y-%m-%dT%H:%M:%S.%fZ").timestamp()*1000
+        else:
+            created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            "timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
+
+    def buildTestNGResultPayload(self, results, jobName, jobNumber):
+
+        print(results)
+        print(type(results))
+        duration=0
+        if type(results['testng-results']['suite']) is list:
+            for s in results['testng-results']['suite']:
+                if s['@duration-ms']:
+                    duration=duration+int(s['@duration-ms'])
+                else:
+                    duration=duration+0
+        else:
+            if results['testng-results']['suite']['@duration-ms']:
+                duration = results['testng-results']['suite']['@duration-ms']
+            else:
+                duration=0
+
+        timestamp = self.getEpochTime()
+
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getTestNGResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+
+        # if type(results['testng-results']['suite']['@started-at']) is list:
+        #     if ' ' in results['testng-results']['suite']['@started-at']:
+        #         date_timestamp=results['testng-results']['suite']['@started-at'].split(' ')[0]
+        #         created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
+        #     else:
+        #         date_timestamp=results['testng-results']['suite']['@started-at']
+        #         created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        # else:
+        #     created_timestamp=0
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": duration,
+            "dateCreated": date_time,
+            #"timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
+
+    def buildJunitResultPayload(self, results, jobName, jobNumber):
+
+        if results['testsuite']['@time']:
+            duration = results['testsuite']['@time']
+            durationMS = int(float(duration)) * 1000
+        else:
+            durationMS = 0
+
+        timestamp = self.getEpochTime()
+
+        date_time=self.formatCurrentDateTime()
+        print(date_time)
+
+
+        tests=self.getJunitResults(results)
+
+        if jobNumber is None:
+            jobNumber = str(timestamp[:-3])
+            id = str(jobName) + "_" + str(timestamp)
+        else:
+            id = str(jobName) + "_" + str(jobNumber) + "_" + str(timestamp)
+
+
+        return {
+            "organization": self.organizationId,
+            "displayName": "#"+str(jobName),
+            "number": int(jobNumber),
+            "duration": durationMS,
+            "dateCreated": date_time,
+            #"timestamp": str(int(created_timestamp)),
+            "projectName": str(jobName),
+            "tests": tests
+            }
+
+    def getPytestResults(self,results):
+        tests=[]
+
+
+        for test in results['tests']:
+            tests_temp={
+                'title' : test['nodeid'].split('::')[-1],
+                'duration' : (test['setup']['duration']+test['call']['duration']+test['teardown']['duration']) * 1000,
+                'result' :  test['outcome'],
+                'custom':{
+                    'keywords' : test['keywords']
+                }
+            }
+            tests.append(tests_temp)
+
+        return tests
+
+    def getMochaResults(self,results):
+        tests=[]
+        tests_temp={}
+
+        if results.get('results'):
+            for result in results['results']:
+                if result['suites']:
+                    for s in result['suites']:
+                        tests_temp={
+                            'custom': {
+                                'suite_title': s['title']},
+                            'duration':s['duration']
+                        }
+                        if s['tests']:
+                            for test in s['tests']:
+                                tests_temp['title']=test['title']
+                                tests_temp['result'] =test['state']
+                                if test['err']:
+                                    tests_temp['custom']['error']=test['err']
+                                tests.append(tests_temp)
+                if result['tests']:
+                    for t in result['tests']:
+                        tests_temp={
+                            'duration': t['duration'],
+                            'title'   : t['title'],
+                            'result'  : t['state'],
+                            'custom'  : {
+                                      'fulltitle' :  t['fullTitle']
+                            }
+                        }
+                        if t['err']:
+                            tests_temp['custom']['error']=t['err']
+                        tests.append(tests_temp)
+
+        if results.get('tests'):
+                if results['failures']:
+                    for failed_case in results['failures']:
+                        tests_temp={
+                                    'title'    : failed_case['title'],
+                                    'duration' : failed_case['duration'],
+                                    'result'   : 'failed',
+                                    'custom'   : {
+                                                'fulltitle' : failed_case['fullTitle']
+                                                 }
+                                    }
+                        if failed_case['err']:
+                            tests_temp['custom']['error']=failed_case['err']
+                        tests.append(tests_temp)
+                if results['passes']:
+                    for passed_case in results['passes']:
+                        tests_temp={
+                                    'title'    : passed_case['title'],
+                                    'duration' : passed_case['duration'],
+                                    'result'   :'passed',
+                                    'custom'   : {
+                                                'fulltitle' : passed_case['fullTitle']
+                                                 }
+                                    }
+                        tests.append(tests_temp)
+                if results['pending']:
+                    for pending_case in results['pending']:
+                        tests_temp ={
+                                    'title'    : pending_case['title'],
+                                    'duration' : pending_case['duration'],
+                                    'result'   : 'pending',
+                                    'custom'   : {
+                                        'fulltitle' : pending_case['fullTitle']
+                                    }
+                        }
+                        tests.append(tests_temp)
+
+        return tests
+
+    def buildTestData(self, suitename, start_date, testname, classname, test_method_name, duration, status, exception=None):
+        tests_temp= {
+                    'custom':{
+                        'suitename': suitename,
+                        'testname' : testname,
+                        'classname': classname
+                        },
+                    'title':test_method_name,
+                    'duration': duration,
+                    'result': status
+                    }
+        if ' ' in start_date:
+                date_timestamp=start_date.split(' ')[0]
+                created_timestamp=dt.strptime(date_timestamp, "%Y-%m-%dT%H:%M:%S").timestamp()*1000
+        else:
+                created_timestamp=dt.strptime(start_date, "%Y-%m-%dT%H:%M:%SZ").timestamp()*1000
+        tests_temp['created_timestamp'] = created_timestamp
+
+        if exception:
+            tests_temp['custom']['exception']=exception
+        return tests_temp
+
+
+    def getTestNGResults(self,results):
+        tests=[]
+
+        if type(results['testng-results']['suite']) is list:
+            for suite in results['testng-results']['suite']:
+                if suite.get('test'):
+                    if type(suite['test']) is list:
+                        for test in suite['test']:
+                            if type(test['class']) is list:
+                                for clas in test['class']:
+                                    tests_temp['custom']['classname']=clas['@name']
+                                    if clas['test-method'] is list:
+                                        for test_method in clas[test_method]:
+                                            tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
+                                                                           test_method['@name'], test_method['@duration-ms'],
+                                                                           test_method['@status'], test_method.get('exception') )
+                                            tests.append(tests_temp)
+                                    else:
+                                        tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
+                                                                      clas['test_method']['@name'], clas['test_method']['@duration-ms'],
+                                                                    clas['test_method']['@status'], clas['test_method'].get('exception')  )
+                                        tests.append(tests_temp)
+                            elif type(test['class']['test-method']) is list:
+                                for test_method in test['class']['test-method']:
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'],
+                                                                   test_method['@name'], test_method['@duration-ms'],
+                                                                   test_method['@status'], test_method.get('exception'))
+                            else:
+                                tests_temp =  self.buildTestData(suite['@name'],suite['@started-at'], test['@name'], test['class']['@name'],
+                                                    test['class']['test-method']['@name'],test['class']['test-method']['@duration-ms'],
+                                                    test['class']['test-method']['@status'],test['class']['test-method'].get('exception') )
+                                tests.append(tests_temp)
+                    elif type(suite['test']['class']) is list:
+                        tests_temp['custom']['testname']=suite['test']['@name']
+                        for clas in suite['test']['class']:
+                            tests_temp['custom']['classname']=clas['@name']
+                            if clas['test-method'] is list:
+                                for test_method in clas[test_method]:
+                                    tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'],
+                                                                   test_method['@name'],test_method['@duration-ms'],
+                                                                   test_method['@status'], test_method.get('exception')   )
+                                    tests.append(tests_temp)
+                            else:
+                                tests_temp= self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'],clas['@name'],
+                                                               clas['test-method']['@name'], clas['test-method']['@duration-ms'],
+                                                               clas['test-method']['@status'], clas['test-method'].get('exception'))
+                                tests.append(tests_temp)
+                    elif type(suite['test']['class']['test-method']) is list:
+                        for test_method in suite['test']['class']['test-method']:
+                            tests_temp=self.buildTestData(suite['@name'],suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'],
+                                                          test_method['@name'],test_method['@duration-ms'], test_method['@status'],
+                                                          test_method.get('exception'))
+                            tests.append(tests_temp)
+                    else:
+                        tests_temp=self.buildTestData(suite['@name'], suite['@started-at'], suite['test']['@name'], suite['test']['class']['@name'],
+                                    suite['test']['class']['test-method']['@name'],suite['test']['class']['test-method']['@duration-ms'], suite['test']['class']['test-method']['@status'],
+                                    suite['test']['class']['test-method'].get('exception'))
+                        tests.append(tests_temp)
+        elif type(results['testng-results']['suite']['test']) is list:
+            for test in results['testng-results']['suite']['test']:
+                if type(test['class']) is list:
+                    for clas in test['class']:
+                        if type(clas['test-method']) is list:
+                            for test_method in clas['test-method']:
+                                tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], test_method['@name'],
+                                                              test_method['@duration-ms'], test_method['@status'], test_method.get('exception'))
+                                tests.append(tests_temp)
+                        else:
+                            tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], clas['test-method']['@name'],
+                                                          clas['test-method']['@duration-ms'], clas['test-method']['@status'],
+                                                          clas['test-method'].get('exception'))
+                            tests.append(tests_temp)
+                elif type(test['class']['test-method']) is list:
+                    for test_method in test['class']['test-method']:
+                        tests_temp=self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'], test['class']['test-method']['@name'],
+                                                    test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
+                                                    test['class']['test-method'].get('exception') )
+                else:
+                    tests_temp = self.buildTestData(results['testng-results']['suite']['@name'],results['testng-results']['suite']['@started-at'], test['@name'], clas['@name'],
+                            test['class']['test-method']['@name'], test['class']['test-method']['@duration-ms'], test['class']['test-method']['@status'],
+                            test['class']['test-method'].get('exception')
+                    )
+                    tests.append(tests_temp)
+        elif type(results['testng-results']['suite']['test']['class']) is list:
+            for clas in results['testng-results']['suite']['test']['class']:
+                if type(clas['test-method']) is list:
+                    for test_method in clas['test-method']:
+                        tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                                      results['testng-results']['suite']['test']['@name'], clas['@name'],
+                                                      test_method['@name'], test_method['@duration-ms'], test_method['@status'],
+                                                      test_method.get('exception')
+                                                      )
+                        tests.append(tests_temp)
+                else:
+                    tests_temp=self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                                results['testng-results']['suite']['test']['@name'], clas['@name'],
+                                                clas['test-method']['@name'], clas['test-method']['@duration-ms'],
+                                                clas['test-method']['@status'], clas['test-method'].get('exception')
+                                                )
+                    tests.append(tests_temp)
+
+        elif type(results['testng-results']['suite']['test']['class']['test-method']) is list:
+            for test_method in results['testng-results']['suite']['test']['class']['test-method']:
+                tests_temp = self.buildTestData( results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                        results['testng-results']['suite']['test']['@name'],
+                        results['testng-results']['suite']['test']['class']['@name'], test_method['@name'], test_method['@duration-ms'],
+                        test_method['@status'], test_method.get('exception'))
+                tests.append(tests_temp)
+        else:
+            tests_temp = self.buildTestData(results['testng-results']['suite']['@name'], results['testng-results']['suite']['@started-at'],
+                                            results['testng-results']['suite']['test']['@name'],
+                    results['testng-results']['suite']['test']['class']['@name'],  results['testng-results']['suite']['test']['class']['test-method']['@name'],
+                    results['testng-results']['suite']['test']['class']['test-method']['@duration-ms'],
+                    results['testng-results']['suite']['test']['class']['test-method']['@status'],
+                    results['testng-results']['suite']['test']['class']['test-method'].get('exception')
+            )
+            tests.append(tests_temp)
+
+        return tests
+
+    def getJunitResults(self,results):
+        tests=[]
+        print(type(results['testsuite']['testcase']))
+
+        if type(results['testsuite']['testcase']) is list:
+            for test in results['testsuite']['testcase']:
+                tests_temp={
+                    'title': test['@name'],
+                    'duration': test['@time'],
+                    'custom' : {
+                        'classname': test['@classname']
+                    }
+                }
+                if test.get('skipped'):
+                    tests_temp['custom']['skipped']=test['skipped']
+                    tests_temp['result']='skipped'
+                elif test.get('failure '):
+                    tests_temp['custom']['failure']=test['failure']
+                    tests_temp['result'] = 'failed'
+                elif test.get('error'):
+                    tests_temp['custom']['error']=test['error']
+                    tests_temp['result']='error'
+                else:
+                    tests_temp['result']='passed'
+                tests.append(tests_temp)
+
+        else:
+            tests_temp={
+                    'title': results['testsuite']['testcase']['@name'],
+                    'duration': results['testsuite']['testcase']['@time'],
+                    'custom' : {
+                        'classname': results['testsuite']['testcase']['@classname']
+                    }
+            }
+            if results['testsuite']['testcase'].get('skipped'):
+                tests_temp['custom']['skipped']=results['testsuite']['testcase']['skipped']
+                tests_temp['result']='skipped'
+            elif results['testsuite']['testcase'].get('failure'):
+                tests_temp['result']='failure'
+                tests_temp['custom']['failure']=results['testsuite']['testcase']['failure']
+            elif results['testsuite']['testcase'].get('error'):
+                tests_temp['custom']['error']=results['testsuite']['testcase']['error']
+                tests_temp['result']='error'
+            else:
+                tests_temp['result']='passed'
+
+            tests.append(tests_temp)
+
+
+        return tests
+
+
     def sendCucumberTestResultsJson(self, filePath,
                                     jobName, jobNumber=None):
         print("Sending webhook for cucumber test results to " + self.url)
@@ -115,6 +572,102 @@ class NeuroConnector:
         payload = self.buildTestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
         endpoint = "/ms-source-mediator/cucumber/webhook/receive"
         self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendPytestTestResultsJson(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for pytest test results to " + self.url)
+
+        results = self.parseJSONfile(filePath)
+
+        payload = self.buildPytestResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing.
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\pytest\payload_pytest.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendMochaTestResultsJson(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for Mocha test results to " + self.url)
+
+        results = self.parseJSONfile(filePath)
+
+        payload = self.buildMochaResultWebhookPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing.
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\Mocha\payload_mocha_suite1.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendTestNGResults(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for TestNG test results to " + self.url)
+
+        results = self.parseJSONfile(filePath)
+
+        payload = self.buildTestNGResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+        #remove below block writing payload to a file. only for testing.
+        # print('$$$$$$$$$$$$$$$$$$$$')
+        # print(payload)
+        # with open('sample_test_reports\output_d0902\Testng/testng-results.json', 'w') as f:
+        #     json.dump(payload,f, indent=4)
+
+
+        endpoint = "/ms-source-mediator/automation-test/webhook/receive"
+        #uncomment the below line once the endpoint is ready for testing
+        self.send_webhook(endpoint=endpoint, payload=payload)
+
+    def sendJunitResults(self, filePath,
+                                    jobName, jobNumber=None):
+        print("Sending webhook for JUnit test results to " + self.url)
+
+        if os.path.isdir(filePath):
+            files = os.listdir(filePath)
+            for file in files:
+                print(file)
+                results = self.parseXMLfile(filePath+file)
+
+                payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+                #remove below block writing payload to a file. only for testing.
+                # print('$$$$$$$$$$$$$$$$$$$$')
+                # print(payload)
+                # with open('sample_test_reports\output_d0902\Junit/' + file+'.json', 'w') as f:
+                #     json.dump(payload,f, indent=4)
+
+
+                endpoint = "/ms-source-mediator/automation-test/webhook/receive"
+                #uncomment the below line once the endpoint is ready for testing
+                self.send_webhook(endpoint=endpoint, payload=payload)
+        else :
+
+                results = self.parseXMLfile(filePath)
+
+                payload = self.buildJunitResultPayload(results=results, jobName=jobName, jobNumber=jobNumber)
+
+                #remove below block writing payload to a file. only for testing.
+                # print('$$$$$$$$$$$$$$$$$$$$')
+                # print(payload)
+                # with open('sample_test_reports\payload_JUnit1.json', 'w') as f:
+                #     json.dump(payload,f, indent=4)
+
+
+                endpoint = "/ms-source-mediator/automation-test/webhook/receive"
+                #uncomment the below line once the endpoint is ready for testing
+                self.send_webhook(endpoint=endpoint, payload=payload)
 
     def sendTriggerWebhook(self, payload):
         endpoint = "/ms-source-mediator/custom/release_and_deployment/webhook/receive"
@@ -339,91 +892,78 @@ class Orchestrator:
     environmentType = None
     triggerType = None
 
-    def __init__(self, args):
+    def __init__(self):
+        self.parse_arguments()
 
-        self.args = args
-        self.opts = ["-h", "--func=", "--path=", "--url=", "--org=", "--jobName=", "--jobNum=", "--issueKey=",
-                     "--projName=",
-                     "--branch=", "--repositoryName=", "--label=", "--env=", "--envType=", "--help"]
+    def parse_arguments(self):
 
-        self.instructions = '\n-h, --help : Help\n'
-        self.instructions = self.instructions + '\nFunction 1 (sendTestResultsJson)\nNeuroConnector --func 1 --org [organizationId] --path [filePath] --jobName [jobName] --jobNum [jobNumber (optional)] --url [baseUrl (optional)]\n'
-        self.instructions = self.instructions + '\nFunction 2 (releaseTrigger)\nNeuroConnector --func 2 --url [baseUrl (optional)] --org [organizationId] --branch [branchName] --env [environment i.e. stage] --envType [env type i.e. test] --issueKey [JIRA Key] --label [Free text field] --projName [The name of the neuro module] --repositoryName [repo name]\n'
-        self.instructions = self.instructions + '\nFunction 3 (deploymentTrigger)\nNeuroConnector --func 2 --org [organizationId] --projName [projectName, e.g jira/management] --branch [branchName] --repositoryName [repositoryName] --label [type label, e.g ms/client] --url [baseUrl (optional)]\n'
+        parser = argparse.ArgumentParser(
+                    prog='python3 neuro-connector-api.NeuroConnector',
+                    description='A CLI to push release metrics by connecting to Neuro')
+        parser.add_argument('--functions', type=str, help='function to be performed. ex, sendCucumberResults, releaseTrigger or deploymentTrigger')
+        parser.add_argument('--org', type=str, help='organization id of Neuro')
+        parser.add_argument('--jobname', type=str, help='jobname')
+        parser.add_argument('--path', type=str, help='path of test report file')
+        parser.add_argument('--jobNum', type=str, help='Job Number')
+        parser.add_argument('--url', type=str, help='neuro url')
+        parser.add_argument('--env', type=str, help='environment, ex., stage. REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--environmentType', type=str, help='environment type. ex., test, REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--branch', type=str, help='branch name. REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--issueKey', type=str, help='jira key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--projName', type=str, help='The name of the neuro module. key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--label', type=str, help='Free text field. key REQUIRED for releaseTrigger and deploymentTrigger function')
+        parser.add_argument('--repositoryName', type=str, help='repository name. REQUIRED for releaseTrigger and deploymentTrigger')
 
-    def getParameterPairsForArgs(self):
-        parameterPairs = {}
-        for i, arg in enumerate(self.args):
-            for opt in self.opts:
-                if opt[-1] == "=" and opt[:-1] == arg:
-                    try:
-                        value = self.args[i + 1]
-                        assert value is not None and not value.startswith("-")
-                    except:
-                        raise Exception("no value for key " + arg)
+        #It is better to use sub_parser. But I see deploymentTrigger and releaseTrigger are calling a generic trigger function.
+        #arguements passed are different in each case. would need some changes here.
 
-                    parameterPairs.update({arg: value})
-                elif arg == opt and opt[-1] != "=":
-                    parameterPairs.update({arg: None})
+        args = parser.parse_args()
 
-        return parameterPairs
+        self.function=args.functions
+        self.organizationId=args.org
+        self.jobName=args.jobname
+        self.filePath=args.path
+        self.jobName=args.jobname
+        self.baseUrl=args.url
+        self.jobNumber=args.jobNum
+        self.environmentType=args.environmentType
+        self.environmentName=args.env
+        self.projectName=args.projName
+        self.label=args.label
+        self.repositoryName=args.repositoryName
+        self.issueKey=args.issueKey
+        self.branch=args.branch
 
     def orchestrate(self):
-        parameterPairs = self.getParameterPairsForArgs()
-
-        assert "-h" not in parameterPairs and "--help" not in parameterPairs and len(
-            parameterPairs.keys()) >= 3, "\n\nSee instructions\n" + self.instructions
-        assert "--func" in parameterPairs, "function param needed --func\n" + self.instructions
-
-        function = parameterPairs["--func"]
-
-        if str(function) == '1':
-            for key in parameterPairs.keys():
-                if key == "--org":
-                    self.organizationId = parameterPairs[key]
-                elif key == "--url":
-                    self.baseUrl = parameterPairs[key]
-                elif key == "--path":
-                    self.filePath = parameterPairs[key]
-                elif key == "--jobName":
-                    self.jobName = parameterPairs[key]
-                elif key == "--jobNum":
-                    self.jobNumber = parameterPairs[key]
-
-        elif str(function) in ['2', '3']:
-            for key in parameterPairs.keys():
-                if key == "--org":
-                    self.organizationId = parameterPairs[key]
-                elif key == "--url":
-                    self.baseUrl = parameterPairs[key]
-                elif key == "--issueKey":
-                    self.issueKey = parameterPairs[key]
-                elif key == "--projName":
-                    self.projectName = parameterPairs[key]
-                elif key == "--branch":
-                    self.branch = parameterPairs[key]
-                elif key == "--repositoryName":
-                    self.repositoryName = parameterPairs[key]
-                elif key == "--label":
-                    self.label = parameterPairs[key]
-                elif key == "--env":
-                    self.environmentName = parameterPairs[key]
-                elif key == "--envType":
-                    self.environmentType = parameterPairs[key]
 
         try:
             nc = NeuroConnector(url=self.baseUrl, organizationId=self.organizationId)
-            if str(function) == '1':
+
+            if str(self.function) == 'sendCucumberResults':
                 nc.sendCucumberTestResultsJson(self.filePath, self.jobName, self.jobNumber)
-            elif str(function) == '2':
+
+            elif str(self.function) == 'sendPytestResults':
+                nc.sendPytestTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+
+            elif str(self.function) =='sendMochaResults':
+                nc.sendMochaTestResultsJson(self.filePath, self.jobName, self.jobNumber)
+
+            elif str(self.function) == 'releaseTrigger':
                 nc.releaseTrigger(self.issueKey, self.projectName, self.branch, self.repositoryName, self.label,
-                                  self.environmentName, self.environmentType)
-            elif str(function) == '3':
+                                    self.environmentName, self.environmentType)
+
+            elif str(self.function) == 'deploymentTrigger':
                 nc.deploymentTrigger(self.projectName, self.branch, self.repositoryName, self.label,
-                                     self.environmentName, self.environmentType)
+                                        self.environmentName, self.environmentType)
+
+            elif str(self.function) == 'sendTestNGResults':
+                nc.sendTestNGResults(self.filePath, self.jobName, self.jobNumber)
+
+            elif str(self.function) == 'sendJunitResults':
+                nc.sendJunitResults(self.filePath, self.jobName, self.jobNumber)
+
             else:
-                print(self.instructions, file=sys.stderr)
-                raise Exception("function not defined")
+                raise Exception(self.function + " function not defined")
 
         except Exception as e:
             print("NeuroConnector failed for reason " + str(e), file=sys.stderr)
@@ -433,4 +973,5 @@ class Orchestrator:
 
 
 if __name__ == "__main__":
-    Orchestrator(args=sys.argv[1:]).orchestrate()
+    #Orchestrator(args=sys.argv[1:]).orchestrate()
+    Orchestrator().orchestrate()
