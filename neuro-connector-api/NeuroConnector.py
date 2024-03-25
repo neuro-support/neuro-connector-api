@@ -725,8 +725,8 @@ class NeuroConnector:
         self.sendTriggerWebhook(payload)
 
     def deploymentTrigger(self, projectName, branch, repositoryName, label, environmentName, environmentType):
-        payload = self.buildGenericTriggerPayload(projectName, branch, repositoryName, label, environmentName,
-                                                  environmentType)
+        payload = self.buildGenericTriggerPayload(projectName=projectName, issueKey="NC-1234", branch=branch, repositoryName=repositoryName, label=label, environmentName=environmentName,
+                                                  environmentType=environmentType)
 
         payload["triggerType"] = "deployment"
         print("Sending webhook for deployment trigger to " + self.url)
