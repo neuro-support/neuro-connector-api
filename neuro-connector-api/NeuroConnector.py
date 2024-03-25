@@ -403,7 +403,7 @@ class NeuroConnector:
                                 for clas in test['class']:
                                     tests_temp['custom']['classname']=clas['@name']
                                     if clas['test-method'] is list:
-                                        for test_method in clas[test_method]:
+                                        for test_method in clas['test_method']:
                                             tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
                                                                            test_method['@name'], test_method['@duration-ms'],
                                                                            test_method['@status'], test_method.get('exception') )
