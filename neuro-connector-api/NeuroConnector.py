@@ -401,7 +401,7 @@ class NeuroConnector:
                         for test in suite['test']:
                             if type(test['class']) is list:
                                 for clas in test['class']:
-                                    tests_temp['custom']['classname']=clas['@name']
+                                    # tests_temp['custom']['classname']=clas['@name']
                                     if clas['test-method'] is list:
                                         for test_method in clas['test_method']:
                                             tests_temp= self.buildTestData(suite['@name'], suite['@started-at'], test['@name'], clas['@name'],
